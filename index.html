@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Fixed Layout</title>
+<title>Hexanoid — Fixed Overlap & Fast Appearance</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -22,7 +22,7 @@
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Fixed Layout</div>
+    <div id="title">Hexanoid — Fixed Overlap & Fast Appearance</div>
 
     <div class="mode-select">
       <label for="modeSelect">Режим:</label>
@@ -93,11 +93,12 @@
   const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
   
-  // Настройки ускоренного появления
+  // Настройки ускоренного появления - УЛУЧШЕНО
   const APPEARANCE_SETTINGS = {
-    fastSpeedMultiplier: 4, // В 4 раза быстрее при появлении
+    fastSpeedMultiplier: 5, // Увеличил до 5 раз
     normalSpeedMultiplier: 1,
-    rowAppearanceStates: new Map()
+    rowAppearanceStates: new Map(),
+    minAppearanceDistance: 100 // Минимальное расстояние для появления (в пикселях сверху)
   };
   
   // Эффекты для нижней стенки
@@ -107,16 +108,17 @@
     glowAlpha: 0
   };
   
-  // Настройки бесконечного режима
+  // Настройки бесконечного режима - УЛУЧШЕНО
   const INFINITE_SETTINGS = {
-    maxBricksPerRow: 6, // Еще уменьшим для избежания нахлеста
+    maxBricksPerRow: 5, // Уменьшено для избежания нахлеста
     minBricksPerRow: 2,
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
     powerupChance: 0.15,
     basePowerupChance: 0.15,
     powerupChanceIncrease: 0.02,
     maxPowerupChance: 0.35,
-    gameOverLine: 500
+    gameOverLine: 500,
+    minSpacing: HEX_RADIUS * 2.8 // Минимальное расстояние между центрами кирпичей
   };
 
   // Типы бонусов с настройками для индикаторов
@@ -373,7 +375,7 @@
 
   // Бесконечный режим
   function startInfiniteMode(){
-    titleEl.textContent = 'Hexanoid — Fixed Layout';
+    titleEl.textContent = 'Hexanoid — Fixed Overlap & Fast Appearance';
     hexBricks = [];
     balls = [];
     powerups = [];
@@ -399,7 +401,7 @@
     
     // Создаем начальные кирпичи - начинаем прямо сверху с ускорением
     for(let i=0; i<3; i++){
-      spawnBrickRow(i * 100); // Большой отступ между рядами
+      spawnBrickRow(i * 120); // Увеличил отступ между рядами
     }
     
     updateStatus();
@@ -510,40 +512,61 @@
     return ball;
   }
 
-  // Спавн ряда кирпичей - УПРОЩЕННАЯ ВЕРСИЯ
+  // Спавн ряда кирпичей - ПЕРЕРАБОТАН: исправлено наложение
   function spawnBrickRow(yOffset = 0){
     const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
-    const gridSize = HEX_RADIUS * 2.3;
+    const minSpacing = INFINITE_SETTINGS.minSpacing;
+    const maxAttempts = 100;
     const newBricks = [];
     const rowId = Date.now() + Math.random();
     
     // Добавляем состояние для нового ряда (ускоренное появление)
     APPEARANCE_SETTINGS.rowAppearanceStates.set(rowId, {
       appeared: false,
-      bricksCount: bricksInRow
+      bricksCount: bricksInRow,
+      startY: -APPEARANCE_SETTINGS.minAppearanceDistance - yOffset // Начинаем достаточно высоко
     });
     
-    // Простой алгоритм размещения в сетке
-    const availableSpots = [];
-    const columns = Math.floor(canvas.width / gridSize) - 2;
+    // Создаем сетку для размещения - УЛУЧШЕНО
+    const columns = Math.floor((canvas.width - minSpacing * 2) / minSpacing);
     
-    // Создаем список доступных колонок
-    for(let col = 1; col <= columns; col++){
-      availableSpots.push(col);
+    // Если колонок меньше, чем нужно кирпичей, уменьшаем количество кирпичей
+    const actualBricks = Math.min(bricksInRow, columns);
+    
+    // Создаем список доступных позиций в сетке
+    const availablePositions = [];
+    for(let col = 0; col < columns; col++){
+      availablePositions.push(col);
     }
     
-    // Перемешиваем доступные позиции
-    for(let i = availableSpots.length - 1; i > 0; i--){
+    // Перемешиваем позиции
+    for(let i = availablePositions.length - 1; i > 0; i--){
       const j = Math.floor(Math.random() * (i + 1));
-      [availableSpots[i], availableSpots[j]] = [availableSpots[j], availableSpots[i]];
+      [availablePositions[i], availablePositions[j]] = [availablePositions[j], availablePositions[i]];
     }
     
     // Берем нужное количество позиций
-    const selectedSpots = availableSpots.slice(0, bricksInRow);
+    const selectedPositions = availablePositions.slice(0, actualBricks);
     
-    for(const col of selectedSpots){
-      const x = col * gridSize;
-      const y = -HEX_RADIUS * 4 - yOffset; // Начинаем ВЫСОКО сверху
+    for(const col of selectedPositions){
+      // Вычисляем позицию X с учетом отступов от краев
+      const x = minSpacing + col * minSpacing;
+      
+      // Позиция Y - начинаем достаточно высоко
+      const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(rowId);
+      const y = rowState.startY;
+      
+      // Проверяем, не пересекается ли с существующими кирпичами (дополнительная проверка)
+      let tooClose = false;
+      for(const brick of hexBricks){
+        if(distance(x, y, brick.x, brick.y) < minSpacing * 0.8){
+          tooClose = true;
+          break;
+        }
+      }
+      
+      // Если слишком близко, пропускаем эту позицию
+      if(tooClose) continue;
       
       // Определяем, будет ли бонус в кирпиче
       let containsPowerup = null;
@@ -566,7 +589,10 @@
       });
     }
     
-    hexBricks.push(...newBricks);
+    // Добавляем только если есть кирпичи
+    if(newBricks.length > 0){
+      hexBricks.push(...newBricks);
+    }
   }
 
   // Спавн падающего бонуса
@@ -677,7 +703,7 @@
     }
   }
 
-  // Обновление кирпичей с ускоренным появлением - ИСПРАВЛЕНА ЛОГИКА
+  // Обновление кирпичей с ускоренным появлением - ПЕРЕРАБОТАНО
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
@@ -693,10 +719,14 @@
           // Если ряд еще не появился, используем ускоренную скорость
           speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
           
-          // Кирпич появляется, когда его ВЕРХНЯЯ часть видна
+          // Кирпич появляется, когда его ВЕРХНЯЯ часть видна (y + HEX_RADIUS > 0)
+          // Это значит, что кирпич только начал появляться
           if(brick.y + HEX_RADIUS > 0){
             brick.appeared = true;
-            rowState.appeared = true; // Помечаем весь ряд как появившийся
+            // Помечаем весь ряд как появившийся
+            rowState.appeared = true;
+            // Показываем сообщение о появлении ряда
+            showMessage(`Ряд появился!`, '#4cc98a');
           }
         }
         
@@ -712,20 +742,17 @@
         }
       }
       
-      // Удаляем ряды, которые полностью появились и вышли за пределы
+      // Очищаем состояния рядов, у которых все кирпичи удалены
       for(const [rowId, rowState] of APPEARANCE_SETTINGS.rowAppearanceStates){
-        if(rowState.appeared){
-          // Можно очистить состояние, если все кирпичи этого ряда удалены
-          let rowHasBricks = false;
-          for(const brick of hexBricks){
-            if(brick.rowId === rowId){
-              rowHasBricks = true;
-              break;
-            }
+        let rowHasBricks = false;
+        for(const brick of hexBricks){
+          if(brick.rowId === rowId){
+            rowHasBricks = true;
+            break;
           }
-          if(!rowHasBricks){
-            APPEARANCE_SETTINGS.rowAppearanceStates.delete(rowId);
-          }
+        }
+        if(!rowHasBricks){
+          APPEARANCE_SETTINGS.rowAppearanceStates.delete(rowId);
         }
       }
     }
@@ -852,10 +879,18 @@
         // Визуальная подсказка ускоренного появления
         const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(b.rowId);
         if (rowState && !rowState.appeared) {
-          // Если ряд еще не появился, рисуем с эффектом "призрака"
+          // Если ряд еще не появился, рисуем с эффектом "призрака" и показываем индикатор ускорения
           ctx.save();
-          ctx.globalAlpha = 0.6;
+          ctx.globalAlpha = 0.7;
           drawHex(b.x, b.y, HEX_RADIUS, b.color);
+          
+          // Индикатор ускорения (маленькая стрелка вверх)
+          ctx.globalAlpha = 1;
+          ctx.fillStyle = '#4cc98a';
+          ctx.font = '12px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.fillText('↑', b.x, b.y - HEX_RADIUS - 5);
           ctx.restore();
         } else {
           // Обычное отображение
