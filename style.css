@@ -1,0 +1,13 @@
+:root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
+html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
+#app{height:100%;display:flex;flex-direction:column;padding:12px;box-sizing:border-box}
+#title{height:44px;display:flex;align-items:center;justify-content:center;font-weight:600;background:var(--frame);border-radius:8px;padding:6px 12px}
+.frame{flex:1;margin-top:12px;border:4px solid var(--accent);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.6);background:#070707;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
+canvas{display:block;touch-action:none;max-width:100%;height:100%;object-fit:contain}
+#status{margin-top:10px;text-align:center;color:#aab}
+.controls{margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+button{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:8px 12px;border-radius:8px;cursor:pointer}
+.mode-select{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
+.speed-control{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+.completion{color:#4cc98a;font-weight:bold}
+@media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
