@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Smooth Scroll</title>
+<title>Hexanoid — Infinite Mode</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -14,40 +14,49 @@
   #status{margin-top:10px;text-align:center;color:#aab}
   .controls{margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
   button{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:8px 12px;border-radius:8px;cursor:pointer}
-  .level-select{display:flex;gap:8px;align-items:center;margin-bottom:8px}
-  .level-select select{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:6px 10px;border-radius:6px}
+  .mode-select{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
   .speed-control{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .completion{color:#4cc98a;font-weight:bold}
-  @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .level-select,.speed-control{flex-direction:column} }
+  .active-powerup{margin:5px 0;padding:3px 8px;border-radius:4px;font-size:12px;display:inline-block;margin-right:5px;}
+  .powerup-multiball{background:linear-gradient(45deg, #ff6b6b, #c44569);}
+  .powerup-freeze{background:linear-gradient(45deg, #4d96ff, #6bc5ff);}
+  .powerup-pierce{background:linear-gradient(45deg, #9b59b6, #8e44ad);}
+  .powerup-triple{background:linear-gradient(45deg, #f39c12, #e67e22);}
+  @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
 </style>
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Smooth Scroll</div>
+    <div id="title">Hexanoid — Infinite Mode</div>
 
-    <div class="level-select">
-      <label for="levelSelect">Уровень:</label>
-      <select id="levelSelect">
+    <div class="mode-select">
+      <label for="modeSelect">Режим:</label>
+      <select id="modeSelect">
+        <option value="infinite">Бесконечный</option>
+        <option value="levels">Уровни</option>
+      </select>
+      <select id="levelSelect" style="display:none">
         <option value="" disabled selected>Загрузка уровней...</option>
       </select>
       <span id="levelCompletion"></span>
     </div>
 
     <div class="speed-control">
-      <label for="speedSlider">Скорость скролла:</label>
-      <input type="range" id="speedSlider" min="0.01" max="0.1" step="0.01" value="0.1" style="width: 150px;">
-      <span id="speedValue">1.0</span>
+      <label for="speedSlider">Скорость кирпичей:</label>
+      <input type="range" id="speedSlider" min="0.01" max="0.1" step="0.01" value="0.02" style="width: 150px;">
+      <span id="speedValue">0.02</span>
     </div>
 
     <div class="frame">
       <canvas id="gameCanvas" width="900" height="540" aria-label="game canvas"></canvas>
     </div>
 
-    <div id="status">Загрузка уровня...</div>
+    <div id="status">Счет: 0 | Жизни: 3</div>
+    <div id="activePowerups"></div>
     <div class="controls">
       <button id="restartBtn">Restart</button>
+      <button id="pauseBtn">Pause</button>
       <button id="muteBtn">Mute</button>
-      <button id="nextLevelBtn" style="display:none">Следующий уровень</button>
     </div>
   </div>
 
@@ -57,32 +66,78 @@
   const ctx = canvas.getContext('2d');
   const statusEl = document.getElementById('status');
   const restartBtn = document.getElementById('restartBtn');
+  const pauseBtn = document.getElementById('pauseBtn');
   const muteBtn = document.getElementById('muteBtn');
-  const nextLevelBtn = document.getElementById('nextLevelBtn');
+  const modeSelect = document.getElementById('modeSelect');
   const levelSelect = document.getElementById('levelSelect');
   const levelCompletion = document.getElementById('levelCompletion');
   const speedSlider = document.getElementById('speedSlider');
   const speedValue = document.getElementById('speedValue');
+  const activePowerupsEl = document.getElementById('activePowerups');
   const titleEl = document.getElementById('title');
 
   // Game state
-  let HEX_RADIUS = 20;
+  const HEX_RADIUS = 24;
   let hexBricks = [];
-  let ball = { x: 0, y: 0, dx: 3.8, dy: -3.8, radius: 8 };
+  let balls = []; // Множество шаров
+  let ballTrails = new Map(); // Треки для каждого шара
+  let powerups = []; // Активные бонусы
+  let activeEffects = new Map(); // Активные эффекты бонусов
   let paddle = { x: 0, y: 0, width: 120, height: 12, speed: 8 };
-  let trail = [];
-  const TRAIL_MAX = 18;
   let running = true;
+  let paused = false;
   let muted = false;
-  let currentLevel = null;
-  let completedLevels = new Set();
+  let score = 0;
+  let lives = 3;
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let scrollSpeed = 1.0; // Скорость скролла
-  let scrollOffset = 0; // Смещение для скролла
-  let isScrolling = true; // Флаг скролла
+  let brickSpeed = 0.02; // Базовая скорость движения кирпичей
+  let spawnTimer = 0;
+  const SPAWN_INTERVAL = 2000; // Интервал появления новых кирпичей (мс)
   
-  // Level catalog: extend this list to add new levels
+  // Настройки бесконечного режима
+  const INFINITE_SETTINGS = {
+    maxBricksPerRow: 8,
+    minBricksPerRow: 2,
+    brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
+    powerupColors: ['#ff6b6b', '#4d96ff', '#9b59b6', '#f39c12'], // Разные цвета для разных бонусов
+    powerupChance: 0.15, // 15% шанс появления бонуса
+    gameOverLine: 500 // Линия, при достижении которой игра заканчивается
+  };
+
+  // Типы бонусов
+  const POWERUP_TYPES = {
+    MULTIBALL: { 
+      id: 'multiball', 
+      name: 'Мультишар', 
+      duration: 10000, // 10 секунд
+      color: '#ff6b6b',
+      icon: '⚽'
+    },
+    FREEZE: { 
+      id: 'freeze', 
+      name: 'Заморозка', 
+      duration: 8000, // 8 секунд
+      color: '#4d96ff',
+      icon: '❄️'
+    },
+    PIERCE: { 
+      id: 'pierce', 
+      name: 'Пробивной', 
+      duration: 12000, // 12 секунд
+      color: '#9b59b6',
+      icon: '💥'
+    },
+    TRIPLE: { 
+      id: 'triple', 
+      name: 'Тройной', 
+      duration: 7000, // 7 секунд
+      color: '#f39c12',
+      icon: '🔶'
+    }
+  };
+
+  // Level catalog
   const levelConfigs = [
     { value: 'Levels/level1.json', label: 'Уровень 1' },
     { value: 'Levels/level2.json', label: 'Уровень 2' },
@@ -90,18 +145,25 @@
     { value: 'Levels/level4.json', label: 'Уровень 4' },
     { value: 'Levels/level5.json', label: 'Уровень 5' },
     { value: 'Levels/level6.json', label: 'Уровень 6' },
-    { value: 'Levels/custom.json', label: 'Пользовательский', excludeFromCycle: true }
+    { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
-  const levelMetaMap = new Map(levelConfigs.map(cfg => [cfg.value, cfg]));
-  const cycleLevels = levelConfigs
-    .filter(cfg => !cfg.excludeFromCycle)
-    .map(cfg => cfg.value);
-  currentLevel = cycleLevels[0] || levelConfigs[0]?.value || 'Levels/level1.json';
 
   // Speed slider
   speedSlider.addEventListener('input', (e) => {
-    scrollSpeed = parseFloat(e.target.value);
-    speedValue.textContent = scrollSpeed.toFixed(1);
+    brickSpeed = parseFloat(e.target.value);
+    speedValue.textContent = brickSpeed.toFixed(2);
+  });
+
+  // Mode selection
+  modeSelect.addEventListener('change', (e) => {
+    if (e.target.value === 'infinite') {
+      levelSelect.style.display = 'none';
+      startInfiniteMode();
+    } else {
+      levelSelect.style.display = 'inline-block';
+      populateLevelSelect();
+      loadLevel(levelSelect.value || levelConfigs[0].value);
+    }
   });
 
   function populateLevelSelect(){
@@ -112,9 +174,6 @@
       option.textContent = cfg.label;
       levelSelect.appendChild(option);
     });
-    if (currentLevel) {
-      levelSelect.value = currentLevel;
-    }
   }
   populateLevelSelect();
 
@@ -128,12 +187,16 @@
     paddle.width = Math.max(60, Math.min(260, Math.floor(canvas.width * 0.14)));
     paddle.x = clamp(paddle.x || (canvas.width - paddle.width) / 2, 0, canvas.width - paddle.width);
     paddle.y = canvas.height - 18;
+    INFINITE_SETTINGS.gameOverLine = canvas.height - 50; // Линия проигрыша
   }
   window.addEventListener('resize', resizeCanvas);
 
   // Utilities
   function clamp(v,a,b){ return Math.max(a, Math.min(b, v)); }
-  function randColor(){ const base=['#c94c4c','#4cc98a','#4c7ac9','#c9c24c','#4cc9c6','#c84cc9']; return base[Math.floor(Math.random()*base.length)]; }
+  function randInt(min,max){ return Math.floor(Math.random()*(max-min+1))+min; }
+  function randChoice(arr){ return arr[Math.floor(Math.random()*arr.length)]; }
+  function distance(x1,y1,x2,y2){ return Math.hypot(x2-x1, y2-y1); }
+  
   function lighten(hex, amt){
     const num = parseInt(hex.slice(1),16);
     const r = Math.min(255, ((num>>16) + 255*amt))|0;
@@ -167,156 +230,301 @@
     ctx.restore();
   }
 
-  // Load level
-  async function loadLevel(path = currentLevel || cycleLevels[0] || 'Levels/level1.json'){
-    try {
-      statusEl.textContent = 'Загрузка уровня...';
-      levelComplete = false;
-      nextLevelBtn.style.display = 'none';
-      hexBricks = [];
-      scrollOffset = 0;
-      isScrolling = true;
+  // Draw powerup
+  function drawPowerup(powerup){
+    ctx.save();
+    ctx.fillStyle = powerup.type.color;
+    ctx.beginPath();
+    ctx.arc(powerup.x, powerup.y, powerup.radius, 0, Math.PI*2);
+    ctx.fill();
+    
+    // Иконка бонуса
+    ctx.fillStyle = '#fff';
+    ctx.font = '16px Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(powerup.type.icon, powerup.x, powerup.y);
+    ctx.restore();
+  }
+
+  // Бесконечный режим
+  function startInfiniteMode(){
+    titleEl.textContent = 'Hexanoid — Бесконечный режим';
+    hexBricks = [];
+    balls = [];
+    powerups = [];
+    activeEffects.clear();
+    score = 0;
+    lives = 3;
+    levelComplete = false;
+    paused = false;
+    spawnTimer = performance.now();
+    
+    // Создаем стартовый шар
+    createBall();
+    
+    // Создаем начальные кирпичи
+    for(let i=0; i<5; i++){
+      spawnBrickRow(i * 60);
+    }
+    
+    statusEl.textContent = `Счет: ${score} | Жизни: ${lives}`;
+    updateActivePowerups();
+  }
+
+  // Создание нового шара
+  function createBall(){
+    const ball = {
+      id: Date.now() + Math.random(),
+      x: canvas.width / 2,
+      y: canvas.height * 0.7,
+      dx: 4 * (Math.random() < 0.5 ? 1 : -1),
+      dy: -4,
+      radius: 8,
+      pierce: false, // Пробивной режим
+      trail: []
+    };
+    balls.push(ball);
+    ballTrails.set(ball.id, []);
+    return ball;
+  }
+
+  // Спавн ряда кирпичей
+  function spawnBrickRow(yOffset = 0){
+    const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
+    const gridSize = HEX_RADIUS * 2.2;
+    const maxAttempts = 50;
+    const newBricks = [];
+    
+    for(let i=0; i<bricksInRow; i++){
+      let attempts = 0;
+      let placed = false;
       
-      const res = await fetch(path, { cache: 'no-store' });
-      if (!res.ok) throw new Error('fetch failed ' + res.status);
-      const data = await res.json();
-      HEX_RADIUS = data.hexRadius || HEX_RADIUS;
-      
-      const raw = Array.isArray(data.centers) ? data.centers : [];
-      const norm = normalizeCentersToCanvas(raw, canvas.width, canvas.height, 12);
-      
-      // Создаем все кирпичи сразу, но начнем их рисовать сверху
-      const topOffset = -canvas.height; // Начинаем полностью выше экрана
-      
-      hexBricks = norm.map(c => ({
-        x: c.x,
-        y: c.y + topOffset, // Начальная позиция выше экрана
-        originalY: c.y,     // Финальная позиция
-        color: randColor(),
-        hit: false,
-        removing: false,
-        removeStart: 0
-      }));
-      
-      currentLevel = path;
-      const meta = levelMetaMap.get(path);
-      const levelLabel = meta ? meta.label : path.split('/').pop();
-      titleEl.textContent = `Hexanoid — ${levelLabel}`;
-      statusEl.textContent = `Загружено: ${hexBricks.length} кирпичей, скролл...`;
-      resetBall();
-      
-      // Update level select
-      levelSelect.value = path;
-      if (levelSelect.value !== path) {
-        const option = document.createElement('option');
-        option.value = path;
-        option.textContent = levelLabel;
-        levelSelect.appendChild(option);
-        levelSelect.value = path;
+      while(!placed && attempts < maxAttempts){
+        const x = randInt(HEX_RADIUS, canvas.width - HEX_RADIUS);
+        const y = -HEX_RADIUS - yOffset; // Начинаем выше экрана
+        
+        // Проверяем пересечение с существующими кирпичами
+        let collides = false;
+        for(const brick of [...hexBricks, ...newBricks]){
+          if(distance(x, y, brick.x, brick.y) < gridSize){
+            collides = true;
+            break;
+          }
+        }
+        
+        if(!collides){
+          // Определяем, будет ли бонус в кирпиче
+          let containsPowerup = null;
+          if(Math.random() < INFINITE_SETTINGS.powerupChance){
+            const powerupTypes = Object.values(POWERUP_TYPES);
+            containsPowerup = randChoice(powerupTypes);
+          }
+          
+          newBricks.push({
+            x: x,
+            y: y,
+            color: randChoice(INFINITE_SETTINGS.brickColors),
+            hit: false,
+            removing: false,
+            removeStart: 0,
+            containsPowerup: containsPowerup,
+            powerupType: containsPowerup
+          });
+          placed = true;
+        }
+        attempts++;
       }
-      updateLevelCompletion();
+    }
+    
+    hexBricks.push(...newBricks);
+  }
+
+  // Спавн падающего бонуса
+  function spawnPowerup(x, y, type){
+    powerups.push({
+      x: x,
+      y: y,
+      radius: 10,
+      dy: 2,
+      type: type
+    });
+  }
+
+  // Обновление бонусов
+  function updatePowerups(){
+    for(let i = powerups.length - 1; i >= 0; i--){
+      const powerup = powerups[i];
+      powerup.y += powerup.dy;
       
-      return true;
-    } catch (err) {
-      console.error('Level load error', err);
-      const isFileOrigin = window.location.protocol === 'file:';
-      const hint = isFileOrigin
-        ? 'Браузер блокирует чтение JSON напрямую. Запустите игру через локальный сервер (например, "npx serve" или "python -m http.server").'
-        : 'Проверьте, что файл уровня существует и доступен.';
-      statusEl.textContent = `Ошибка загрузки уровня. ${hint}`;
-      if (isFileOrigin && !fileAccessWarningShown) {
-        fileAccessWarningShown = true;
-        alert('Браузер не разрешает fetch() файлов при открытии HTML напрямую. Запустите в папке "Hexanoid" локальный сервер, например:\n\npython -m http.server 8000\n\nЗатем откройте http://localhost:8000/hexanoid.html');
+      // Столкновение с платформой
+      if(powerup.y + powerup.radius > paddle.y &&
+         powerup.y - powerup.radius < paddle.y + paddle.height &&
+         powerup.x + powerup.radius > paddle.x &&
+         powerup.x - powerup.radius < paddle.x + paddle.width){
+        
+        activatePowerup(powerup.type);
+        powerups.splice(i, 1);
+        continue;
       }
-      hexBricks = [];
-      return false;
+      
+      // Удаляем, если упал за экран
+      if(powerup.y - powerup.radius > canvas.height){
+        powerups.splice(i, 1);
+      }
     }
   }
 
-  // Обновляем скролл
-  function updateScroll() {
-    if (!isScrolling) return;
+  // Активация бонуса
+  function activatePowerup(type){
+    const now = performance.now();
     
-    // Увеличиваем смещение (кирпичи движутся вниз)
-    scrollOffset += scrollSpeed;
-    
-    // Обновляем позиции всех кирпичей
-    for (const brick of hexBricks) {
-      brick.y = brick.originalY - canvas.height + scrollOffset;
-    }
-    
-    // Когда все кирпичи достигли своих позиций, останавливаем скролл
-    if (scrollOffset >= canvas.height) {
-      isScrolling = false;
-      // Устанавливаем кирпичи на финальные позиции
-      for (const brick of hexBricks) {
-        brick.y = brick.originalY;
-      }
-      statusEl.textContent = `Готово! Осталось ${remainingBrickCount()} кирпичей`;
-    }
-  }
-
-  // Update level completion display
-  function updateLevelCompletion() {
-    if (completedLevels.has(currentLevel)) {
-      levelCompletion.textContent = '✓ Пройден';
-      levelCompletion.className = 'completion';
+    // Если эффект уже активен, сбрасываем таймер
+    if(activeEffects.has(type.id)){
+      activeEffects.set(type.id, { startTime: now, duration: type.duration });
     } else {
-      levelCompletion.textContent = '';
-      levelCompletion.className = '';
+      activeEffects.set(type.id, { startTime: now, duration: type.duration });
+      
+      // Применяем немедленный эффект
+      switch(type.id){
+        case 'multiball':
+          // Создаем дополнительный шар
+          const newBall = createBall();
+          newBall.x = paddle.x + paddle.width / 2;
+          newBall.y = paddle.y - newBall.radius;
+          newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+          newBall.dy = -4;
+          break;
+          
+        case 'triple':
+          // Создаем два дополнительных шара
+          for(let i=0; i<2; i++){
+            const tripleBall = createBall();
+            tripleBall.x = paddle.x + paddle.width / 2;
+            tripleBall.y = paddle.y - tripleBall.radius;
+            const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
+            tripleBall.dx = 4 * Math.cos(angle);
+            tripleBall.dy = -Math.abs(4 * Math.sin(angle));
+          }
+          break;
+          
+        case 'freeze':
+          // Заморозка уже обрабатывается в updateBricks
+          break;
+          
+        case 'pierce':
+          // Включаем пробивной режим для всех шаров
+          balls.forEach(ball => ball.pierce = true);
+          break;
+      }
+    }
+    
+    updateActivePowerups();
+  }
+
+  // Обновление активных бонусов
+  function updateActivePowerups(){
+    const now = performance.now();
+    
+    // Удаляем истекшие эффекты
+    for(const [id, effect] of activeEffects){
+      if(now - effect.startTime > effect.duration){
+        activeEffects.delete(id);
+        
+        // Отменяем эффекты
+        if(id === 'pierce'){
+          balls.forEach(ball => ball.pierce = false);
+        }
+      }
+    }
+    
+    // Обновляем отображение
+    activePowerupsEl.innerHTML = '';
+    for(const [id, effect] of activeEffects){
+      const powerupType = Object.values(POWERUP_TYPES).find(p => p.id === id);
+      if(powerupType){
+        const remaining = Math.max(0, effect.duration - (now - effect.startTime));
+        const elem = document.createElement('div');
+        elem.className = `active-powerup powerup-${id}`;
+        elem.innerHTML = `${powerupType.icon} ${powerupType.name}: ${(remaining/1000).toFixed(1)}s`;
+        activePowerupsEl.appendChild(elem);
+      }
     }
   }
 
-  function remainingBrickCount(){
-    return hexBricks.filter(b => !b.hit).length;
-  }
-
-  // Check if level is complete
-  function checkLevelCompletion() {
-    if (!hexBricks.length) return false;
-    return remainingBrickCount() === 0 && !isScrolling;
-  }
-
-  // Load next level
-  function loadNextLevel() {
-    const pool = cycleLevels.length ? cycleLevels : levelConfigs.map(cfg => cfg.value);
-    if (!pool.length) return;
-    const currentIndex = pool.indexOf(currentLevel);
-    const nextIndex = currentIndex === -1 ? 0 : (currentIndex + 1) % pool.length;
-    loadLevel(pool[nextIndex]);
-  }
-
-  // Normalize centers to canvas
-  function normalizeCentersToCanvas(centers, canvasW, canvasH, margin = 12){
-    if (!Array.isArray(centers) || centers.length === 0) return [];
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    for (const c of centers){
-      if (typeof c.x !== 'number' || typeof c.y !== 'number') continue;
-      minX = Math.min(minX, c.x); minY = Math.min(minY, c.y);
-      maxX = Math.max(maxX, c.x); maxY = Math.max(maxY, c.y);
+  // Обновление кирпичей
+  function updateBricks(now){
+    const freezeActive = activeEffects.has('freeze');
+    
+    // Двигаем кирпичи вниз, если нет заморозки
+    if(!freezeActive){
+      for(const brick of hexBricks){
+        brick.y += brickSpeed;
+        
+        // Проверка достижения нижней границы
+        if(brick.y + HEX_RADIUS > INFINITE_SETTINGS.gameOverLine && !brick.hit){
+          loseLife();
+          brick.hit = true;
+          brick.removing = true;
+          brick.removeStart = now;
+        }
+      }
     }
-    if (minX === Infinity) return [];
-    const srcW = Math.max(1, maxX - minX);
-    const srcH = Math.max(1, maxY - minY);
-    const dstW = Math.max(10, canvasW - 2*margin);
-    const dstH = Math.max(10, canvasH - 2*margin);
-    const scale = Math.min(dstW / srcW, dstH / srcH);
-    const extraX = (dstW - srcW * scale) / 2;
-    const extraY = (dstH - srcH * scale) / 2;
-    const tx = margin - minX * scale + extraX;
-    const ty = margin - minY * scale + extraY;
-    return centers.map(c => ({ x: Math.round(c.x * scale + tx), y: Math.round(c.y * scale + ty) }));
+    
+    // Удаляем уничтоженные кирпичи
+    hexBricks = hexBricks.filter(brick => {
+      if(brick.hit && brick.removing){
+        const tt = now - brick.removeStart;
+        if(tt > 360){
+          // При уничтожении кирпича с бонусом создаем падающий бонус
+          if(brick.containsPowerup){
+            spawnPowerup(brick.x, brick.y, brick.powerupType);
+          }
+          score += 100;
+          return false;
+        }
+      }
+      return true;
+    });
+    
+    // Спавн новых кирпичей
+    if(now - spawnTimer > SPAWN_INTERVAL){
+      spawnBrickRow();
+      spawnTimer = now;
+    }
   }
 
-  // Ball/paddle
-  function resetBall(){
+  // Потеря жизни
+  function loseLife(){
+    lives--;
+    if(lives <= 0){
+      gameOver();
+    } else {
+      // Оставляем только один шар после потери жизни
+      if(balls.length > 0){
+        balls = [balls[0]];
+        ballTrails.clear();
+        ballTrails.set(balls[0].id, []);
+        resetBall(balls[0]);
+      }
+      statusEl.textContent = `Счет: ${score} | Жизни: ${lives}`;
+    }
+  }
+
+  // Сброс шара
+  function resetBall(ball){
     ball.x = canvas.width / 2;
-    ball.y = canvas.height * 0.6;
-    const angle = (Math.PI/4) + (Math.random()-0.5) * 0.6;
-    const speed = 3.8 + Math.random() * 1.2;
-    ball.dx = speed * Math.cos(angle) * (Math.random() < 0.5 ? 1 : -1);
-    ball.dy = -Math.abs(speed * Math.sin(angle));
-    trail.length = 0;
+    ball.y = canvas.height * 0.7;
+    ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+    ball.dy = -4;
+    ballTrails.set(ball.id, []);
+  }
+
+  // Game Over
+  function gameOver(){
+    running = false;
+    statusEl.textContent = `Игра окончена! Счет: ${score}`;
+    alert(`Игра окончена!\nВаш счет: ${score}\nНажмите Restart чтобы играть снова.`);
   }
 
   // Draw scene
@@ -330,37 +538,38 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Level complete message
-    if (levelComplete) {
-      ctx.fillStyle = '#4cc98a';
-      ctx.font = 'bold 24px system-ui, Arial';
-      ctx.textAlign = 'center';
-      ctx.fillText('Уровень пройден!', canvas.width / 2, canvas.height / 2 - 20);
-      ctx.font = '16px system-ui, Arial';
-      ctx.fillText('Нажмите "Следующий уровень"', canvas.width / 2, canvas.height / 2 + 10);
-      ctx.textAlign = 'left';
-    }
-
     // bricks
-    const t = now || performance.now();
     for (const b of hexBricks){
       if (b.hit && b.removing){
-        const tt = t - b.removeStart;
+        const tt = now - b.removeStart;
         if (tt < 120){
           const p = tt / 120;
           drawHex(b.x, b.y, HEX_RADIUS, b.color, 1 + 0.15 * p, 1 - p*0.05);
         } else if (tt < 360){
           const p = (tt - 120) / 240;
           drawHex(b.x, b.y, HEX_RADIUS, b.color, Math.max(0, 1.15 * (1 - p)), Math.max(0, 1 - p));
-        } else {
-          b.toRemove = true;
         }
-      } else if (!b.hit && b.y + HEX_RADIUS > 0 && b.y - HEX_RADIUS < canvas.height) {
-        // Рисуем только кирпичи, которые находятся в видимой области
+      } else if (!b.hit) {
         drawHex(b.x, b.y, HEX_RADIUS, b.color);
+        
+        // Рисуем иконку бонуса в кирпиче
+        if(b.containsPowerup){
+          ctx.save();
+          ctx.fillStyle = '#fff';
+          ctx.font = '14px Arial';
+          ctx.textAlign = 'center';
+          ctx.textBaseline = 'middle';
+          ctx.globalAlpha = 0.9;
+          ctx.fillText(b.containsPowerup.icon, b.x, b.y);
+          ctx.restore();
+        }
       }
     }
-    hexBricks = hexBricks.filter(b => !b.toRemove);
+
+    // powerups
+    for(const powerup of powerups){
+      drawPowerup(powerup);
+    }
 
     // paddle
     ctx.fillStyle = '#ffffff';
@@ -372,37 +581,76 @@
     ctx.fillRect(paddle.x + 4*zoneW, paddle.y, zoneW, paddle.height);
     ctx.globalAlpha = 1;
 
-    // trail
-    for (let i=0;i<trail.length;i++){
-      const p = trail[i];
-      const a = (i+1)/trail.length;
-      ctx.beginPath();
-      ctx.arc(p.x, p.y, ball.radius * 0.6, 0, Math.PI*2);
-      ctx.fillStyle = `rgba(255,80,80,${a*0.45})`;
-      ctx.fill();
+    // Линия проигрыша
+    ctx.strokeStyle = '#ff4444';
+    ctx.setLineDash([5, 5]);
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(0, INFINITE_SETTINGS.gameOverLine);
+    ctx.lineTo(canvas.width, INFINITE_SETTINGS.gameOverLine);
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Индикатор пробивного режима
+    const pierceActive = activeEffects.has('pierce');
+    if(pierceActive){
+      ctx.fillStyle = 'rgba(155, 89, 182, 0.3)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
-    // ball
-    ctx.beginPath();
-    ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-    ctx.fillStyle = '#ff4d4d';
-    ctx.fill();
+    // trail and balls
+    for(const ball of balls){
+      const trail = ballTrails.get(ball.id) || [];
+      for (let i=0;i<trail.length;i++){
+        const p = trail[i];
+        const a = (i+1)/trail.length;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, ball.radius * 0.6, 0, Math.PI*2);
+        ctx.fillStyle = `rgba(255,80,80,${a*0.45})`;
+        ctx.fill();
+      }
+
+      // ball
+      ctx.beginPath();
+      ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
+      ctx.fillStyle = ball.pierce ? '#9b59b6' : '#ff4d4d';
+      ctx.fill();
+      
+      // Индикатор пробивного шара
+      if(ball.pierce){
+        ctx.strokeStyle = '#fff';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(ball.x, ball.y, ball.radius + 3, 0, Math.PI*2);
+        ctx.stroke();
+      }
+    }
 
     // HUD
     ctx.fillStyle = '#ddd';
-    ctx.font = '12px system-ui, Arial';
-    ctx.fillText(`Кирпичей: ${remainingBrickCount()}`, 10, canvas.height - 10);
-    ctx.fillText(`Скорость: ${scrollSpeed.toFixed(1)}`, 10, canvas.height - 30);
+    ctx.font = '14px system-ui, Arial';
+    ctx.fillText(`Счет: ${score}`, 10, 20);
+    ctx.fillText(`Жизни: ${lives}`, 10, 40);
+    ctx.fillText(`Шаров: ${balls.length}`, 10, 60);
+    ctx.fillText(`Скорость: ${brickSpeed.toFixed(2)}`, canvas.width - 120, 20);
     
-    // Отображаем прогресс скролла
-    if (isScrolling) {
-      const progress = Math.min(100, (scrollOffset / canvas.height) * 100);
-      ctx.fillText(`Загрузка уровня: ${progress.toFixed(0)}%`, canvas.width - 150, canvas.height - 10);
+    // Индикатор заморозки
+    if(activeEffects.has('freeze')){
+      ctx.fillStyle = '#4d96ff';
+      ctx.fillText('❄️ ЗАМОРОЗКА', canvas.width - 120, 40);
     }
     
-    if (levelComplete) {
-      ctx.fillStyle = '#4cc98a';
-      ctx.fillText('Уровень пройден!', canvas.width - 100, canvas.height - 30);
+    // Игра на паузе
+    if(paused){
+      ctx.fillStyle = 'rgba(0,0,0,0.7)';
+      ctx.fillRect(0,0,canvas.width,canvas.height);
+      ctx.fillStyle = '#fff';
+      ctx.font = 'bold 36px system-ui, Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText('ПАУЗА', canvas.width/2, canvas.height/2);
+      ctx.font = '18px system-ui, Arial';
+      ctx.fillText('Нажмите Pause для продолжения', canvas.width/2, canvas.height/2 + 40);
+      ctx.textAlign = 'left';
     }
   }
 
@@ -421,16 +669,15 @@
     return { dx: rx, dy: ry };
   }
 
-  function moveBall(now){
-    if (levelComplete) return;
+  function moveBall(ball, now){
+    if(paused || !running) return;
     
-    // Обновляем скролл
-    updateScroll();
-    
+    const trail = ballTrails.get(ball.id) || [];
     ball.x += ball.dx;
     ball.y += ball.dy;
     trail.push({ x: ball.x, y: ball.y });
-    if (trail.length > TRAIL_MAX) trail.shift();
+    if (trail.length > 18) trail.shift();
+    ballTrails.set(ball.id, trail);
 
     // walls
     if (ball.x < ball.radius){ ball.x = ball.radius; ball.dx *= -1; }
@@ -459,6 +706,15 @@
       const cx = b.x, cy = b.y;
       const ddx = ball.x - cx, ddy = ball.y - cy;
       if (Math.hypot(ddx, ddy) > HEX_RADIUS + ball.radius) continue;
+
+      // В пробивном режиме просто уничтожаем кирпич без отскока
+      if(ball.pierce){
+        b.hit = true;
+        b.removing = true;
+        b.removeStart = now;
+        score += 150; // Дополнительные очки за пробивной режим
+        continue; // Продолжаем движение без отскока
+      }
 
       let collided = false;
       const rot = 0;
@@ -490,24 +746,30 @@
       if (collided) break;
     }
 
-    // Check level completion
-    if (checkLevelCompletion() && !levelComplete) {
-      levelComplete = true;
-      completedLevels.add(currentLevel);
-      updateLevelCompletion();
-      nextLevelBtn.style.display = 'block';
-      statusEl.textContent = 'Уровень пройден! Нажмите "Следующий уровень"';
-    }
-
     // fallen below
     if (ball.y - ball.radius > canvas.height){
-      resetBall();
+      // Удаляем шар, если он не последний
+      if(balls.length > 1){
+        const index = balls.indexOf(ball);
+        if(index > -1){
+          balls.splice(index, 1);
+          ballTrails.delete(ball.id);
+        }
+      } else {
+        loseLife();
+      }
+    }
+  }
+
+  function moveBalls(now){
+    for(const ball of balls){
+      moveBall(ball, now);
     }
   }
 
   // Input: mouse, pointer, touch
   function pointerMove(clientX){
-    if (levelComplete) return;
+    if(paused || !running) return;
     const rect = canvas.getBoundingClientRect();
     const localX = clientX - rect.left;
     paddle.x = clamp(localX - paddle.width/2, 0, canvas.width - paddle.width);
@@ -527,25 +789,23 @@
   }, { passive: true });
 
   // Buttons
-  restartBtn.addEventListener('click', async () => { 
-    const noBricksLeft = !hexBricks.length || remainingBrickCount() === 0;
-    if (levelComplete || noBricksLeft) {
-      await loadLevel(currentLevel);
-      return;
+  restartBtn.addEventListener('click', () => { 
+    if(modeSelect.value === 'infinite'){
+      startInfiniteMode();
+    } else {
+      // Для режима уровней
+      loadLevel(levelSelect.value || levelConfigs[0].value);
     }
-    resetBall(); 
-    levelComplete = false;
-    nextLevelBtn.style.display = 'none';
-    statusEl.textContent = `Продолжаем: осталось ${remainingBrickCount()} кирпичей`;
+  });
+  
+  pauseBtn.addEventListener('click', () => { 
+    paused = !paused; 
+    pauseBtn.textContent = paused ? 'Resume' : 'Pause'; 
   });
   
   muteBtn.addEventListener('click', () => { 
     muted = !muted; 
     muteBtn.textContent = muted ? 'Unmute' : 'Mute'; 
-  });
-  
-  nextLevelBtn.addEventListener('click', () => {
-    loadNextLevel();
   });
   
   levelSelect.addEventListener('change', (e) => {
@@ -560,11 +820,23 @@
     const dt = now - lastTime;
     lastTime = now;
 
-    // keyboard paddle control
-    if (keys['ArrowLeft']) paddle.x = clamp(paddle.x - paddle.speed, 0, canvas.width - paddle.width);
-    if (keys['ArrowRight']) paddle.x = clamp(paddle.x + paddle.speed, 0, canvas.width - paddle.width);
+    if(!paused && running){
+      // keyboard paddle control
+      if (keys['ArrowLeft']) paddle.x = clamp(paddle.x - paddle.speed, 0, canvas.width - paddle.width);
+      if (keys['ArrowRight']) paddle.x = clamp(paddle.x + paddle.speed, 0, canvas.width - paddle.width);
+      
+      // Обновление игры только в бесконечном режиме
+      if(modeSelect.value === 'infinite'){
+        updateBricks(now);
+        updatePowerups();
+        updateActivePowerups();
+        moveBalls(now);
+        
+        // Обновляем статус
+        statusEl.textContent = `Счет: ${score} | Жизни: ${lives} | Шаров: ${balls.length}`;
+      }
+    }
 
-    moveBall(now);
     draw(now);
 
     if (running) requestAnimationFrame(loop);
@@ -572,18 +844,47 @@
 
   // keyboard state
   const keys = {};
-  window.addEventListener('keydown', e => { keys[e.key] = true; });
+  window.addEventListener('keydown', e => { 
+    keys[e.key] = true;
+    // Пробел для запуска шара
+    if(e.key === ' ' && balls.length === 1){
+      balls[0].dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+      balls[0].dy = -4;
+    }
+  });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-  // Init: resize, load level, start loop
+  // Функция загрузки уровня (для режима уровней)
+  async function loadLevel(path){
+    // Реализация загрузки уровней из JSON файлов
+    try {
+      const res = await fetch(path, { cache: 'no-store' });
+      if (!res.ok) throw new Error('fetch failed ' + res.status);
+      const data = await res.json();
+      // ... реализация загрузки уровня ...
+    } catch (err) {
+      console.error('Level load error', err);
+      // Обработка ошибок...
+    }
+  }
+
+  // Init: resize, start infinite mode
   resizeCanvas();
-  await loadLevel(currentLevel);
+  startInfiniteMode();
   lastTime = performance.now();
   running = true;
   requestAnimationFrame(loop);
 
   // Expose for debug
-  window.__hexanoid = { loadLevel, hexBricks, completedLevels, scrollSpeed, isScrolling };
+  window.__hexanoid = { 
+    startInfiniteMode, 
+    hexBricks, 
+    balls,
+    powerups,
+    activeEffects,
+    spawnBrickRow,
+    activatePowerup
+  };
 })();
 </script>
 </body>
