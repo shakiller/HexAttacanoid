@@ -3,14 +3,14 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Infinite Mode Fixed</title>
+<title>Hexanoid — Fixed Layout</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
   #app{height:100%;display:flex;flex-direction:column;padding:12px;box-sizing:border-box}
   #title{height:44px;display:flex;align-items:center;justify-content:center;font-weight:600;background:var(--frame);border-radius:8px;padding:6px 12px}
   .frame{flex:1;margin-top:12px;border:4px solid var(--accent);border-radius:12px;box-shadow:0 12px 30px rgba(0,0,0,0.6);background:#070707;display:flex;align-items:center;justify-content:center;position:relative;overflow:hidden}
-  canvas{display:block;touch-action:none;max-width:100%;height:auto}
+  canvas{display:block;touch-action:none;max-width:100%;height:100%;object-fit:contain}
   #status{margin-top:10px;text-align:center;color:#aab}
   .controls{margin-top:8px;display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
   button{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:8px 12px;border-radius:8px;cursor:pointer}
@@ -22,7 +22,7 @@
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Infinite Mode Fixed</div>
+    <div id="title">Hexanoid — Fixed Layout</div>
 
     <div class="mode-select">
       <label for="modeSelect">Режим:</label>
@@ -87,15 +87,15 @@
   let baseBrickSpeed = 0.04;
   let currentBrickSpeed = 0.04;
   let spawnTimer = 0;
-  const SPAWN_INTERVAL = 2200;
+  const SPAWN_INTERVAL = 1800;
   let gameStartTime = 0;
   let lastSpeedIncreaseTime = 0;
   const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
   
-  // Настройки ускоренного появления - ИСПРАВЛЕНО
+  // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
-    fastSpeedMultiplier: 3,
+    fastSpeedMultiplier: 4, // В 4 раза быстрее при появлении
     normalSpeedMultiplier: 1,
     rowAppearanceStates: new Map()
   };
@@ -109,7 +109,7 @@
   
   // Настройки бесконечного режима
   const INFINITE_SETTINGS = {
-    maxBricksPerRow: 7, // Уменьшено для избежания нахлеста
+    maxBricksPerRow: 6, // Еще уменьшим для избежания нахлеста
     minBricksPerRow: 2,
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
     powerupChance: 0.15,
@@ -204,38 +204,27 @@
   }
   populateLevelSelect();
 
-  // Resize canvas to frame - ИСПРАВЛЕНО: убрал лишние вычисления
+  // Простая функция resize для заполнения frame
   function resizeCanvas() {
     const frame = document.querySelector('.frame');
     const frameRect = frame.getBoundingClientRect();
     
-    // Фиксируем соотношение сторон
-    const targetWidth = 900;
-    const targetHeight = 540;
-    const scale = Math.min(
-      (frameRect.width - 24) / targetWidth,
-      (frameRect.height - 24) / targetHeight
-    );
+    // Устанавливаем размер canvas равный размеру frame
+    canvas.width = Math.max(300, Math.floor(frameRect.width));
+    canvas.height = Math.max(200, Math.floor(frameRect.height));
     
-    const w = Math.floor(targetWidth * scale);
-    const h = Math.floor(targetHeight * scale);
+    // Не меняем стили canvas, чтобы он заполнил frame
+    canvas.style.width = '100%';
+    canvas.style.height = '100%';
     
-    canvas.width = w;
-    canvas.height = h;
-    
-    // Центрируем canvas внутри frame
-    canvas.style.width = w + 'px';
-    canvas.style.height = h + 'px';
-    
+    // Обновляем позиции элементов
     paddle.width = Math.max(60, Math.min(260, Math.floor(canvas.width * 0.14)));
     paddle.x = clamp(paddle.x || (canvas.width - paddle.width) / 2, 0, canvas.width - paddle.width);
-    paddle.y = canvas.height - 18;
-    INFINITE_SETTINGS.gameOverLine = canvas.height - 50;
+    paddle.y = canvas.height - 30; // Подняли платформу выше
+    INFINITE_SETTINGS.gameOverLine = canvas.height - 60; // Подняли линию проигрыша
   }
   
-  // Вызываем resize при загрузке и изменении размера
   window.addEventListener('resize', resizeCanvas);
-  // Вызываем сразу после загрузки DOM
   document.addEventListener('DOMContentLoaded', resizeCanvas);
 
   // Utilities
@@ -384,7 +373,7 @@
 
   // Бесконечный режим
   function startInfiniteMode(){
-    titleEl.textContent = 'Hexanoid — Infinite Mode Fixed';
+    titleEl.textContent = 'Hexanoid — Fixed Layout';
     hexBricks = [];
     balls = [];
     powerups = [];
@@ -408,9 +397,9 @@
     // Создаем стартовый шар
     createBall();
     
-    // Создаем начальные кирпичи с бОльшим отступом
-    for(let i=0; i<4; i++){ // Уменьшил количество начальных рядов
-      spawnBrickRow(i * 80); // Увеличил отступ между рядами
+    // Создаем начальные кирпичи - начинаем прямо сверху с ускорением
+    for(let i=0; i<3; i++){
+      spawnBrickRow(i * 100); // Большой отступ между рядами
     }
     
     updateStatus();
@@ -521,11 +510,10 @@
     return ball;
   }
 
-  // Спавн ряда кирпичей - ИСПРАВЛЕНО: улучшен алгоритм размещения
+  // Спавн ряда кирпичей - УПРОЩЕННАЯ ВЕРСИЯ
   function spawnBrickRow(yOffset = 0){
     const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
-    const gridSize = HEX_RADIUS * 2.5; // Увеличен размер сетки
-    const maxAttempts = 100; // Увеличен лимит попыток
+    const gridSize = HEX_RADIUS * 2.3;
     const newBricks = [];
     const rowId = Date.now() + Math.random();
     
@@ -535,80 +523,47 @@
       bricksCount: bricksInRow
     });
     
-    // Создаем сетку для размещения кирпичей
-    const columns = Math.floor(canvas.width / gridSize) - 1;
+    // Простой алгоритм размещения в сетке
+    const availableSpots = [];
+    const columns = Math.floor(canvas.width / gridSize) - 2;
     
-    // Пытаемся разместить кирпичи в сетке
-    const usedPositions = new Set();
+    // Создаем список доступных колонок
+    for(let col = 1; col <= columns; col++){
+      availableSpots.push(col);
+    }
     
-    for(let i=0; i<bricksInRow; i++){
-      let attempts = 0;
-      let placed = false;
+    // Перемешиваем доступные позиции
+    for(let i = availableSpots.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [availableSpots[i], availableSpots[j]] = [availableSpots[j], availableSpots[i]];
+    }
+    
+    // Берем нужное количество позиций
+    const selectedSpots = availableSpots.slice(0, bricksInRow);
+    
+    for(const col of selectedSpots){
+      const x = col * gridSize;
+      const y = -HEX_RADIUS * 4 - yOffset; // Начинаем ВЫСОКО сверху
       
-      while(!placed && attempts < maxAttempts){
-        // Пробуем случайную позицию в сетке
-        const col = randInt(0, columns - 1);
-        const row = 0; // Все кирпичи в одном ряду
-        
-        const gridX = col * gridSize + gridSize;
-        const gridY = -HEX_RADIUS * 2 - yOffset;
-        
-        const posKey = `${col},${row}`;
-        
-        // Проверяем, не занята ли эта позиция в текущем ряду
-        if(usedPositions.has(posKey)){
-          attempts++;
-          continue;
-        }
-        
-        // Проверяем пересечение с существующими кирпичами (более строгая проверка)
-        let collides = false;
-        for(const brick of hexBricks){
-          // Учитываем не только центры, но и реальные размеры
-          const dist = distance(gridX, gridY, brick.x, brick.y);
-          if(dist < gridSize * 0.9){ // Более строгая проверка
-            collides = true;
-            break;
-          }
-        }
-        
-        // Проверяем пересечение с новыми кирпичами
-        if(!collides){
-          for(const newBrick of newBricks){
-            const dist = distance(gridX, gridY, newBrick.x, newBrick.y);
-            if(dist < gridSize * 0.9){
-              collides = true;
-              break;
-            }
-          }
-        }
-        
-        if(!collides){
-          // Определяем, будет ли бонус в кирпиче
-          let containsPowerup = null;
-          if(Math.random() < INFINITE_SETTINGS.powerupChance){
-            const powerupTypes = Object.values(POWERUP_TYPES);
-            containsPowerup = randChoice(powerupTypes);
-          }
-          
-          newBricks.push({
-            x: gridX,
-            y: gridY,
-            color: randChoice(INFINITE_SETTINGS.brickColors),
-            hit: false,
-            removing: false,
-            removeStart: 0,
-            containsPowerup: containsPowerup,
-            powerupType: containsPowerup,
-            rowId: rowId,
-            appeared: false
-          });
-          
-          usedPositions.add(posKey);
-          placed = true;
-        }
-        attempts++;
+      // Определяем, будет ли бонус в кирпиче
+      let containsPowerup = null;
+      if(Math.random() < INFINITE_SETTINGS.powerupChance){
+        const powerupTypes = Object.values(POWERUP_TYPES);
+        containsPowerup = randChoice(powerupTypes);
       }
+      
+      newBricks.push({
+        x: x,
+        y: y,
+        color: randChoice(INFINITE_SETTINGS.brickColors),
+        hit: false,
+        removing: false,
+        removeStart: 0,
+        containsPowerup: containsPowerup,
+        powerupType: containsPowerup,
+        rowId: rowId,
+        appeared: false
+      });
     }
     
     hexBricks.push(...newBricks);
@@ -722,23 +677,13 @@
     }
   }
 
-  // Обновление кирпичей с ускоренным появлением - ИСПРАВЛЕНО условие появления
+  // Обновление кирпичей с ускоренным появлением - ИСПРАВЛЕНА ЛОГИКА
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
     if(!freezeActive){
-      // Проверяем состояние появления для каждого ряда
-      const rowStates = new Map();
-      
+      // Обновляем каждый кирпич
       for(const brick of hexBricks){
-        if(!rowStates.has(brick.rowId)){
-          rowStates.set(brick.rowId, {
-            anyBrickAppeared: false,
-            allBricksAppeared: true
-          });
-        }
-        
-        const state = rowStates.get(brick.rowId);
         const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(brick.rowId);
         
         // Определяем скорость движения для кирпича
@@ -748,13 +693,11 @@
           // Если ряд еще не появился, используем ускоренную скорость
           speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
           
-          // ИСПРАВЛЕНО: Проверяем, появился ли кирпич на экране (его НИЖНЯЯ часть)
-          if(brick.y + HEX_RADIUS > 0){ // Кирпич появляется, когда его нижняя часть видна
+          // Кирпич появляется, когда его ВЕРХНЯЯ часть видна
+          if(brick.y + HEX_RADIUS > 0){
             brick.appeared = true;
-            state.anyBrickAppeared = true;
+            rowState.appeared = true; // Помечаем весь ряд как появившийся
           }
-        } else {
-          brick.appeared = true;
         }
         
         // Двигаем кирпич
@@ -767,21 +710,21 @@
           brick.removing = true;
           brick.removeStart = now;
         }
-        
-        // Обновляем состояние появления ряда
-        if(rowState && !brick.appeared){
-          state.allBricksAppeared = false;
-        }
       }
       
-      // Обновляем глобальное состояние рядов
-      for(const [rowId, state] of rowStates){
-        const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(rowId);
-        if(rowState && !rowState.appeared){
-          // ИСПРАВЛЕНО: Сообщение показываем только когда кирпич действительно виден
-          if(state.anyBrickAppeared){
-            rowState.appeared = true;
-            // Не показываем сообщение - оно было излишним
+      // Удаляем ряды, которые полностью появились и вышли за пределы
+      for(const [rowId, rowState] of APPEARANCE_SETTINGS.rowAppearanceStates){
+        if(rowState.appeared){
+          // Можно очистить состояние, если все кирпичи этого ряда удалены
+          let rowHasBricks = false;
+          for(const brick of hexBricks){
+            if(brick.rowId === rowId){
+              rowHasBricks = true;
+              break;
+            }
+          }
+          if(!rowHasBricks){
+            APPEARANCE_SETTINGS.rowAppearanceStates.delete(rowId);
           }
         }
       }
@@ -860,13 +803,13 @@
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     
     ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 48px system-ui, Arial';
+    ctx.font = 'bold 36px system-ui, Arial';
     ctx.textAlign = 'center';
     ctx.textBaseline = 'middle';
     ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 60);
     
     ctx.fillStyle = '#fff';
-    ctx.font = '24px system-ui, Arial';
+    ctx.font = '20px system-ui, Arial';
     ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 - 10);
     
     const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
@@ -874,7 +817,7 @@
     const seconds = elapsedSeconds % 60;
     ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width/2, canvas.height/2 + 30);
     
-    ctx.font = '18px system-ui, Arial';
+    ctx.font = '16px system-ui, Arial';
     ctx.fillText('Нажмите Restart для новой игры', canvas.width/2, canvas.height/2 + 80);
     
     ctx.restore();
@@ -906,15 +849,18 @@
           drawHex(b.x, b.y, HEX_RADIUS, b.color, Math.max(0, 1.15 * (1 - p)), Math.max(0, 1 - p));
         }
       } else if (!b.hit) {
-        // Показываем индикатор ускоренного появления
+        // Визуальная подсказка ускоренного появления
         const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(b.rowId);
-        let alpha = 1;
-        if (rowState && !rowState.appeared && b.y < -HEX_RADIUS) {
-          // Кипричи еще не появились - делаем их полупрозрачными
-          alpha = 0.4;
+        if (rowState && !rowState.appeared) {
+          // Если ряд еще не появился, рисуем с эффектом "призрака"
+          ctx.save();
+          ctx.globalAlpha = 0.6;
+          drawHex(b.x, b.y, HEX_RADIUS, b.color);
+          ctx.restore();
+        } else {
+          // Обычное отображение
+          drawHex(b.x, b.y, HEX_RADIUS, b.color);
         }
-        
-        drawHex(b.x, b.y, HEX_RADIUS, b.color, 1, alpha);
         
         // Рисуем иконку бонуса в кирпиче
         if(b.containsPowerup){
@@ -923,7 +869,7 @@
           ctx.font = '14px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.globalAlpha = 0.9 * alpha;
+          ctx.globalAlpha = 0.9;
           ctx.fillText(b.containsPowerup.icon, b.x, b.y);
           ctx.restore();
         }
@@ -961,14 +907,14 @@
     // Индикатор пробивного режима
     const pierceActive = activeEffects.has('pierce');
     if(pierceActive){
-      ctx.fillStyle = 'rgba(155, 89, 182, 0.3)';
+      ctx.fillStyle = 'rgba(155, 89, 182, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
     // Индикатор заморозки
     const freezeActive = activeEffects.has('freeze');
     if(freezeActive){
-      ctx.fillStyle = 'rgba(77, 150, 255, 0.2)';
+      ctx.fillStyle = 'rgba(77, 150, 255, 0.15)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -1003,17 +949,17 @@
     // HUD
     ctx.fillStyle = '#ddd';
     ctx.font = '14px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, 10, canvas.height - 60);
-    ctx.fillText(`Жизни: ${lives}`, 10, canvas.height - 40);
-    ctx.fillText(`Шаров: ${balls.length}`, 10, canvas.height - 20);
-    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, canvas.height - 60);
-    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, canvas.height - 40);
+    ctx.fillText(`Счет: ${score}`, 10, 20);
+    ctx.fillText(`Жизни: ${lives}`, 10, 40);
+    ctx.fillText(`Шаров: ${balls.length}`, 10, 60);
+    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, 20);
+    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, 40);
     
     // Время игры
     const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
-    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, canvas.height - 20);
+    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
     
     // Сообщение
     if (messageText && now - messageTimer < 2000) {
