@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Infinite Mode v2</title>
+<title>Hexanoid — Infinite Mode v3</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -17,18 +17,12 @@
   .mode-select{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
   .speed-control{display:flex;gap:8px;align-items:center;margin-bottom:8px}
   .completion{color:#4cc98a;font-weight:bold}
-  .active-powerup{margin:5px 0;padding:3px 8px;border-radius:4px;font-size:12px;display:inline-block;margin-right:5px;}
-  .powerup-multiball{background:linear-gradient(45deg, #ff6b6b, #c44569);}
-  .powerup-freeze{background:linear-gradient(45deg, #4d96ff, #6bc5ff);}
-  .powerup-pierce{background:linear-gradient(45deg, #9b59b6, #8e44ad);}
-  .powerup-triple{background:linear-gradient(45deg, #f39c12, #e67e22);}
-  .powerup-bottomwall{background:linear-gradient(45deg, #1abc9c, #16a085);}
   @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
 </style>
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Infinite Mode v2</div>
+    <div id="title">Hexanoid — Infinite Mode v3</div>
 
     <div class="mode-select">
       <label for="modeSelect">Режим:</label>
@@ -53,7 +47,6 @@
     </div>
 
     <div id="status">Счет: 0 | Жизни: 3 | Время: 0:00</div>
-    <div id="activePowerups"></div>
     <div class="controls">
       <button id="restartBtn">Restart</button>
       <button id="pauseBtn">Pause</button>
@@ -74,7 +67,6 @@
   const levelCompletion = document.getElementById('levelCompletion');
   const speedSlider = document.getElementById('speedSlider');
   const speedValue = document.getElementById('speedValue');
-  const activePowerupsEl = document.getElementById('activePowerups');
   const titleEl = document.getElementById('title');
 
   // Game state
@@ -92,13 +84,13 @@
   let lives = 3;
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let baseBrickSpeed = 0.04; // Базовая скорость движения кирпичей
-  let currentBrickSpeed = 0.04; // Текущая скорость с учетом прогресса
+  let baseBrickSpeed = 0.04;
+  let currentBrickSpeed = 0.04;
   let spawnTimer = 0;
   const SPAWN_INTERVAL = 2000;
   let gameStartTime = 0;
   let lastSpeedIncreaseTime = 0;
-  const SPEED_INCREASE_INTERVAL = 60000; // 1 минута
+  const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
   
   // Настройки бесконечного режима
@@ -108,47 +100,52 @@
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
     powerupChance: 0.15,
     basePowerupChance: 0.15,
-    powerupChanceIncrease: 0.02, // Увеличение шанса каждую минуту
+    powerupChanceIncrease: 0.02,
     maxPowerupChance: 0.35,
     gameOverLine: 500
   };
 
-  // Типы бонусов
+  // Типы бонусов с настройками для индикаторов
   const POWERUP_TYPES = {
     MULTIBALL: { 
       id: 'multiball', 
       name: 'Мультишар', 
       duration: 10000,
       color: '#ff6b6b',
-      icon: '⚽'
+      icon: '⚽',
+      indicatorColor: '#ff4444'
     },
     FREEZE: { 
       id: 'freeze', 
       name: 'Заморозка', 
       duration: 8000,
       color: '#4d96ff',
-      icon: '❄️'
+      icon: '❄️',
+      indicatorColor: '#4d96ff'
     },
     PIERCE: { 
       id: 'pierce', 
       name: 'Пробивной', 
       duration: 12000,
       color: '#9b59b6',
-      icon: '💥'
+      icon: '💥',
+      indicatorColor: '#9b59b6'
     },
     TRIPLE: { 
       id: 'triple', 
       name: 'Тройной', 
       duration: 7000,
       color: '#f39c12',
-      icon: '🔶'
+      icon: '🔶',
+      indicatorColor: '#f39c12'
     },
     BOTTOMWALL: { 
       id: 'bottomwall', 
       name: 'Нижняя стенка', 
       duration: 15000,
       color: '#1abc9c',
-      icon: '⬇️'
+      icon: '⬇️',
+      indicatorColor: '#1abc9c'
     }
   };
 
@@ -163,10 +160,10 @@
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
 
-  // Speed slider - теперь только для базовой скорости
+  // Speed slider
   speedSlider.addEventListener('input', (e) => {
     baseBrickSpeed = parseFloat(e.target.value);
-    currentBrickSpeed = baseBrickSpeed; // Обновляем текущую скорость
+    currentBrickSpeed = baseBrickSpeed;
     speedValue.textContent = baseBrickSpeed.toFixed(2);
   });
 
@@ -265,7 +262,7 @@
 
   // Бесконечный режим
   function startInfiniteMode(){
-    titleEl.textContent = 'Hexanoid — Бесконечный режим v2';
+    titleEl.textContent = 'Hexanoid — Infinite Mode v3';
     hexBricks = [];
     balls = [];
     powerups = [];
@@ -289,7 +286,6 @@
     }
     
     updateStatus();
-    updateActivePowerups();
   }
 
   // Обновление статуса
@@ -326,6 +322,58 @@
     messageText = text;
     messageColor = color;
     messageTimer = performance.now();
+  }
+
+  // Рисуем индикаторы бонусов вверху экрана
+  function drawPowerupIndicators(now) {
+    const powerupEntries = Array.from(activeEffects.entries());
+    if (powerupEntries.length === 0) return;
+    
+    const indicatorHeight = 8;
+    const spacing = 2;
+    const startY = 5;
+    let currentY = startY;
+    
+    // Рисуем фон для индикаторов
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * powerupEntries.length + 5);
+    
+    for (const [powerupId, effect] of powerupEntries) {
+      const powerupType = Object.values(POWERUP_TYPES).find(p => p.id === powerupId);
+      if (!powerupType) continue;
+      
+      const elapsed = now - effect.startTime;
+      const remaining = Math.max(0, effect.duration - elapsed);
+      const progress = remaining / effect.duration;
+      
+      // Фон индикатора
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.fillRect(10, currentY, canvas.width - 20, indicatorHeight);
+      
+      // Заполненная часть индикатора
+      const barWidth = (canvas.width - 20) * progress;
+      ctx.fillStyle = powerupType.indicatorColor;
+      ctx.fillRect(10, currentY, barWidth, indicatorHeight);
+      
+      // Иконка бонуса
+      ctx.fillStyle = '#fff';
+      ctx.font = '12px Arial';
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(powerupType.icon, 12, currentY + indicatorHeight / 2);
+      
+      // Название и оставшееся время
+      const timeLeft = (remaining / 1000).toFixed(1);
+      ctx.textAlign = 'right';
+      ctx.fillText(`${powerupType.name} (${timeLeft}с)`, canvas.width - 12, currentY + indicatorHeight / 2);
+      
+      // Граница индикатора
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+      ctx.lineWidth = 1;
+      ctx.strokeRect(10, currentY, canvas.width - 20, indicatorHeight);
+      
+      currentY += indicatorHeight + spacing;
+    }
   }
 
   // Создание нового шара
@@ -478,8 +526,6 @@
           break;
       }
     }
-    
-    updateActivePowerups();
   }
 
   // Обновление активных бонусов
@@ -497,19 +543,6 @@
             balls.forEach(ball => ball.pierce = false);
             break;
         }
-      }
-    }
-    
-    // Обновляем отображение
-    activePowerupsEl.innerHTML = '';
-    for(const [id, effect] of activeEffects){
-      const powerupType = Object.values(POWERUP_TYPES).find(p => p.id === id);
-      if(powerupType){
-        const remaining = Math.max(0, effect.duration - (now - effect.startTime));
-        const elem = document.createElement('div');
-        elem.className = `active-powerup powerup-${id}`;
-        elem.innerHTML = `${powerupType.icon} ${powerupType.name}: ${(remaining/1000).toFixed(1)}s`;
-        activePowerupsEl.appendChild(elem);
       }
     }
   }
@@ -637,6 +670,9 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
+    // Индикаторы бонусов вверху экрана
+    drawPowerupIndicators(now);
+
     // bricks
     for (const b of hexBricks){
       if (b.hit && b.removing){
@@ -748,17 +784,17 @@
     // HUD
     ctx.fillStyle = '#ddd';
     ctx.font = '14px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, 10, 20);
-    ctx.fillText(`Жизни: ${lives}`, 10, 40);
-    ctx.fillText(`Шаров: ${balls.length}`, 10, 60);
-    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, 20);
-    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, 40);
+    ctx.fillText(`Счет: ${score}`, 10, canvas.height - 60);
+    ctx.fillText(`Жизни: ${lives}`, 10, canvas.height - 40);
+    ctx.fillText(`Шаров: ${balls.length}`, 10, canvas.height - 20);
+    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, canvas.height - 60);
+    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, canvas.height - 40);
     
     // Время игры
     const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
-    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
+    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, canvas.height - 20);
     
     // Сообщение
     if (messageText && now - messageTimer < 2000) {
@@ -767,7 +803,7 @@
       ctx.globalAlpha = alpha;
       ctx.font = 'bold 20px system-ui, Arial';
       ctx.textAlign = 'center';
-      ctx.fillText(messageText, canvas.width/2, 40);
+      ctx.fillText(messageText, canvas.width/2, canvas.height/2);
       ctx.textAlign = 'left';
       ctx.globalAlpha = 1;
     }
