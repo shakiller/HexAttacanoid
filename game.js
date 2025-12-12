@@ -1,3 +1,4 @@
+
 (async () => {
   const canvas = document.getElementById('gameCanvas');
   const ctx = canvas.getContext('2d');
@@ -36,12 +37,13 @@
   const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
   
-  // Настройки ускоренного появления
+  // Настройки ускоренного появления - ИЗМЕНЕНО
   const APPEARANCE_SETTINGS = {
     fastSpeedMultiplier: 5,
     normalSpeedMultiplier: 1,
-    firstRowAppeared: false, // Флаг первого появившегося ряда
-    minAppearanceDistance: 150 // Увеличено расстояние для появления
+    firstRowSpawned: false, // Флаг, что первый ряд уже создан
+    initialRowsCreated: false, // Флаг, что начальные ряды созданы
+    accelerationEnded: false // Флаг, что ускорение закончилось
   };
   
   // Эффекты для нижней стенки
@@ -306,7 +308,7 @@
     ctx.restore();
   }
 
-  // Бесконечный режим
+  // Бесконечный режим - ИЗМЕНЕНО
   function startInfiniteMode(){
     titleEl.textContent = 'Hexanoid — Fixed Overlap & Fast Appearance';
     hexBricks = [];
@@ -322,7 +324,12 @@
     lastSpeedIncreaseTime = gameStartTime;
     currentBrickSpeed = baseBrickSpeed;
     INFINITE_SETTINGS.powerupChance = INFINITE_SETTINGS.basePowerupChance;
-    APPEARANCE_SETTINGS.firstRowAppeared = false;
+    
+    // СБРОС НАСТРОЕК УСКОРЕННОГО ПОЯВЛЕНИЯ
+    APPEARANCE_SETTINGS.firstRowSpawned = false;
+    APPEARANCE_SETTINGS.initialRowsCreated = false;
+    APPEARANCE_SETTINGS.accelerationEnded = false;
+    
     bottomWallEffect = {
       active: false,
       particles: [],
@@ -331,12 +338,158 @@
     
     createBall();
     
-    // Создаем начальные кирпичи с ускорением
+    // ИЗМЕНЕНО: Создаем начальные ряды СРАЗУ ВИДИМЫМИ на экране
+    // Первый ряд на позиции y = 100 (уже виден)
+    // Второй ряд выше и т.д.
     for(let i=0; i<3; i++){
-      spawnBrickRow(-i * 100);
+      spawnInitialBrickRow(100 + i * (HEX_RADIUS * 2 + 20)); // Отступ между рядами
     }
     
+    // Отмечаем, что начальные ряды созданы
+    APPEARANCE_SETTINGS.initialRowsCreated = true;
+    // Отмечаем, что первый ряд уже создан (он виден)
+    APPEARANCE_SETTINGS.firstRowSpawned = true;
+    
+    // Запускаем таймер на завершение ускорения через 3 секунды
+    setTimeout(() => {
+      if (!APPEARANCE_SETTINGS.accelerationEnded) {
+        APPEARANCE_SETTINGS.accelerationEnded = true;
+        showMessage('Ускоренное появление завершено', '#4cc98a');
+      }
+    }, 3000);
+    
     updateStatus();
+  }
+
+  // Новая функция для создания начальных рядов (уже видимых)
+  function spawnInitialBrickRow(y){
+    const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
+    const minSpacing = INFINITE_SETTINGS.minSpacing;
+    const newBricks = [];
+    const rowId = Date.now() + Math.random();
+    
+    // Создаем сетку для размещения
+    const columns = Math.floor((canvas.width - minSpacing * 2) / minSpacing);
+    const actualBricks = Math.min(bricksInRow, columns);
+    
+    // Создаем список доступных позиций в сетке
+    const availablePositions = [];
+    for(let col = 0; col < columns; col++){
+      availablePositions.push(col);
+    }
+    
+    // Перемешиваем позиции
+    for(let i = availablePositions.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [availablePositions[i], availablePositions[j]] = [availablePositions[j], availablePositions[i]];
+    }
+    
+    // Берем нужное количество позиций
+    const selectedPositions = availablePositions.slice(0, actualBricks);
+    
+    for(const col of selectedPositions){
+      const x = minSpacing + col * minSpacing;
+      
+      // Проверяем, не пересекается ли с существующими кирпичами
+      let tooClose = false;
+      for(const brick of hexBricks){
+        if(distance(x, y, brick.x, brick.y) < minSpacing * 0.8){
+          tooClose = true;
+          break;
+        }
+      }
+      
+      if(tooClose) continue;
+      
+      let containsPowerup = null;
+      if(Math.random() < INFINITE_SETTINGS.powerupChance){
+        const powerupTypes = Object.values(POWERUP_TYPES);
+        containsPowerup = randChoice(powerupTypes);
+      }
+      
+      newBricks.push({
+        x: x,
+        y: y,
+        color: randChoice(INFINITE_SETTINGS.brickColors),
+        hit: false,
+        removing: false,
+        removeStart: 0,
+        containsPowerup: containsPowerup,
+        powerupType: containsPowerup,
+        rowId: rowId,
+        isInitial: true // Отмечаем как начальный
+      });
+    }
+    
+    if(newBricks.length > 0){
+      hexBricks.push(...newBricks);
+    }
+  }
+
+  // Обычный спавн рядов (для последующих)
+  function spawnBrickRow(){
+    const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
+    const minSpacing = INFINITE_SETTINGS.minSpacing;
+    const newBricks = [];
+    const rowId = Date.now() + Math.random();
+    
+    // Создаем сетку для размещения
+    const columns = Math.floor((canvas.width - minSpacing * 2) / minSpacing);
+    const actualBricks = Math.min(bricksInRow, columns);
+    
+    // Создаем список доступных позиций в сетке
+    const availablePositions = [];
+    for(let col = 0; col < columns; col++){
+      availablePositions.push(col);
+    }
+    
+    // Перемешиваем позиции
+    for(let i = availablePositions.length - 1; i > 0; i--){
+      const j = Math.floor(Math.random() * (i + 1));
+      [availablePositions[i], availablePositions[j]] = [availablePositions[j], availablePositions[i]];
+    }
+    
+    // Берем нужное количество позиций
+    const selectedPositions = availablePositions.slice(0, actualBricks);
+    
+    for(const col of selectedPositions){
+      const x = minSpacing + col * minSpacing;
+      const y = -HEX_RADIUS * 2; // Начинаем чуть выше экрана
+      
+      // Проверяем, не пересекается ли с существующими кирпичами
+      let tooClose = false;
+      for(const brick of hexBricks){
+        if(distance(x, y, brick.x, brick.y) < minSpacing * 0.8){
+          tooClose = true;
+          break;
+        }
+      }
+      
+      if(tooClose) continue;
+      
+      let containsPowerup = null;
+      if(Math.random() < INFINITE_SETTINGS.powerupChance){
+        const powerupTypes = Object.values(POWERUP_TYPES);
+        containsPowerup = randChoice(powerupTypes);
+      }
+      
+      newBricks.push({
+        x: x,
+        y: y,
+        color: randChoice(INFINITE_SETTINGS.brickColors),
+        hit: false,
+        removing: false,
+        removeStart: 0,
+        containsPowerup: containsPowerup,
+        powerupType: containsPowerup,
+        rowId: rowId,
+        isInitial: false // Не начальный
+      });
+    }
+    
+    if(newBricks.length > 0){
+      hexBricks.push(...newBricks);
+    }
   }
 
   // Обновление статуса
@@ -435,81 +588,6 @@
     balls.push(ball);
     ballTrails.set(ball.id, []);
     return ball;
-  }
-
-  // Спавн ряда кирпичей - исправлено для предотвращения наложения
-  function spawnBrickRow(yOffset = 0){
-    const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
-    const minSpacing = INFINITE_SETTINGS.minSpacing;
-    const maxAttempts = 100;
-    const newBricks = [];
-    const rowId = Date.now() + Math.random();
-    
-    // Создаем сетку для размещения
-    const columns = Math.floor((canvas.width - minSpacing * 2) / minSpacing);
-    
-    // Если колонок меньше, чем нужно кирпичей, уменьшаем количество кирпичей
-    const actualBricks = Math.min(bricksInRow, columns);
-    
-    // Создаем список доступных позиций в сетке
-    const availablePositions = [];
-    for(let col = 0; col < columns; col++){
-      availablePositions.push(col);
-    }
-    
-    // Перемешиваем позиции
-    for(let i = availablePositions.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [availablePositions[i], availablePositions[j]] = [availablePositions[j], availablePositions[i]];
-    }
-    
-    // Берем нужное количество позиций
-    const selectedPositions = availablePositions.slice(0, actualBricks);
-    
-    for(const col of selectedPositions){
-      // Вычисляем позицию X с учетом отступов от краев
-      const x = minSpacing + col * minSpacing;
-      
-      // Позиция Y - начинаем достаточно высоко
-      const y = -APPEARANCE_SETTINGS.minAppearanceDistance + yOffset;
-      
-      // Проверяем, не пересекается ли с существующими кирпичами
-      let tooClose = false;
-      for(const brick of hexBricks){
-        if(distance(x, y, brick.x, brick.y) < minSpacing * 0.8){
-          tooClose = true;
-          break;
-        }
-      }
-      
-      // Если слишком близко, пропускаем эту позицию
-      if(tooClose) continue;
-      
-      // Определяем, будет ли бонус в кирпиче
-      let containsPowerup = null;
-      if(Math.random() < INFINITE_SETTINGS.powerupChance){
-        const powerupTypes = Object.values(POWERUP_TYPES);
-        containsPowerup = randChoice(powerupTypes);
-      }
-      
-      newBricks.push({
-        x: x,
-        y: y,
-        color: randChoice(INFINITE_SETTINGS.brickColors),
-        hit: false,
-        removing: false,
-        removeStart: 0,
-        containsPowerup: containsPowerup,
-        powerupType: containsPowerup,
-        rowId: rowId,
-        appeared: false
-      });
-    }
-    
-    // Добавляем только если есть кирпичи
-    if(newBricks.length > 0){
-      hexBricks.push(...newBricks);
-    }
   }
 
   // Спавн падающего бонуса
@@ -620,35 +698,21 @@
     }
   }
 
-  // Обновление кирпичей с ускоренным появлением
+  // Обновление кирпичей - ИЗМЕНЕНО
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
     if(!freezeActive){
-      // Определяем, появился ли уже первый ряд
-      let firstRowAppeared = APPEARANCE_SETTINGS.firstRowAppeared;
+      // Определяем скорость движения для кирпичей
+      let speedMultiplier = APPEARANCE_SETTINGS.normalSpeedMultiplier;
       
-      // Проверяем, появился ли хотя бы один кирпич
-      if (!firstRowAppeared) {
-        for (const brick of hexBricks) {
-          if (brick.y + HEX_RADIUS > 0) {
-            APPEARANCE_SETTINGS.firstRowAppeared = true;
-            firstRowAppeared = true;
-            showMessage('Первый ряд появился! Скорость снижена.', '#4cc98a');
-            break;
-          }
-        }
+      // Если ускоренное появление еще не завершено, используем ускоренную скорость
+      if (!APPEARANCE_SETTINGS.accelerationEnded) {
+        speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
       }
       
       // Обновляем каждый кирпич
       for(const brick of hexBricks){
-        let speedMultiplier = APPEARANCE_SETTINGS.normalSpeedMultiplier;
-        
-        // Если первый ряд еще не появился, используем ускоренную скорость
-        if (!firstRowAppeared) {
-          speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
-        }
-        
         // Двигаем кирпич
         brick.y += currentBrickSpeed * speedMultiplier;
         
@@ -782,10 +846,10 @@
         }
       } else if (!b.hit) {
         // Визуальная подсказка ускоренного появления
-        if (!APPEARANCE_SETTINGS.firstRowAppeared) {
-          // Если первый ряд еще не появился, рисуем с эффектом "призрака"
+        if (!APPEARANCE_SETTINGS.accelerationEnded) {
+          // Если ускорение еще активно, рисуем с эффектом "призрака"
           ctx.save();
-          ctx.globalAlpha = 0.7;
+          ctx.globalAlpha = 0.9;
           drawHex(b.x, b.y, HEX_RADIUS, b.color);
           
           // Индикатор ускорения
@@ -901,7 +965,7 @@
     ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
     
     // Индикатор ускоренного появления
-    if (!APPEARANCE_SETTINGS.firstRowAppeared) {
+    if (!APPEARANCE_SETTINGS.accelerationEnded) {
       ctx.fillStyle = '#4cc98a';
       ctx.font = 'bold 16px system-ui, Arial';
       ctx.textAlign = 'center';
