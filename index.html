@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Infinite Mode v3</title>
+<title>Hexanoid — Infinite Mode v4</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -22,7 +22,7 @@
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Infinite Mode v3</div>
+    <div id="title">Hexanoid — Infinite Mode v4</div>
 
     <div class="mode-select">
       <label for="modeSelect">Режим:</label>
@@ -92,6 +92,20 @@
   let lastSpeedIncreaseTime = 0;
   const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
+  
+  // Настройки ускоренного появления
+  const APPEARANCE_SETTINGS = {
+    fastSpeedMultiplier: 3, // В 3 раза быстрее при появлении
+    normalSpeedMultiplier: 1,
+    rowAppearanceStates: new Map() // Храним состояние появления для каждого ряда
+  };
+  
+  // Эффекты для нижней стенки
+  let bottomWallEffect = {
+    active: false,
+    particles: [],
+    glowAlpha: 0
+  };
   
   // Настройки бесконечного режима
   const INFINITE_SETTINGS = {
@@ -218,6 +232,94 @@
     return `rgb(${r},${g},${b})`;
   }
 
+  // Функция для создания частиц для эффекта нижней стенки
+  function createBottomWallParticles(x, y, count = 8) {
+    for (let i = 0; i < count; i++) {
+      const angle = Math.random() * Math.PI * 2;
+      const speed = 2 + Math.random() * 3;
+      bottomWallEffect.particles.push({
+        x: x,
+        y: y,
+        dx: Math.cos(angle) * speed,
+        dy: Math.sin(angle) * speed,
+        radius: 2 + Math.random() * 4,
+        color: '#1abc9c',
+        life: 1.0,
+        decay: 0.03 + Math.random() * 0.03
+      });
+    }
+  }
+
+  // Обновление частиц эффекта нижней стенки
+  function updateBottomWallEffect(now) {
+    if (!bottomWallEffect.active && bottomWallEffect.particles.length === 0) return;
+    
+    // Обновляем частицы
+    for (let i = bottomWallEffect.particles.length - 1; i >= 0; i--) {
+      const particle = bottomWallEffect.particles[i];
+      particle.x += particle.dx;
+      particle.y += particle.dy;
+      particle.life -= particle.decay;
+      
+      if (particle.life <= 0) {
+        bottomWallEffect.particles.splice(i, 1);
+      }
+    }
+    
+    // Плавное изменение свечения
+    if (bottomWallEffect.active) {
+      bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
+    } else {
+      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.02);
+    }
+  }
+
+  // Рисуем эффект нижней стенки
+  function drawBottomWallEffect() {
+    if (bottomWallEffect.glowAlpha <= 0 && bottomWallEffect.particles.length === 0) return;
+    
+    // Рисуем свечение внизу экрана
+    if (bottomWallEffect.glowAlpha > 0) {
+      const gradient = ctx.createLinearGradient(0, canvas.height - 40, 0, canvas.height);
+      gradient.addColorStop(0, 'rgba(26, 188, 156, 0)');
+      gradient.addColorStop(1, `rgba(26, 188, 156, ${bottomWallEffect.glowAlpha * 0.6})`);
+      
+      ctx.fillStyle = gradient;
+      ctx.fillRect(0, canvas.height - 40, canvas.width, 40);
+      
+      // Рисуем линии энергии
+      ctx.strokeStyle = `rgba(26, 188, 156, ${bottomWallEffect.glowAlpha})`;
+      ctx.lineWidth = 2;
+      ctx.setLineDash([5, 5]);
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height - 5);
+      ctx.lineTo(canvas.width, canvas.height - 5);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      
+      // Рисуем пульсирующие круги
+      const pulse = (Math.sin(Date.now() / 300) + 1) * 0.5;
+      for (let i = 0; i < 5; i++) {
+        const x = canvas.width * (i + 1) / 6;
+        ctx.beginPath();
+        ctx.arc(x, canvas.height - 10, 3 + pulse * 2, 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(26, 188, 156, ${0.5 + pulse * 0.5})`;
+        ctx.fill();
+      }
+    }
+    
+    // Рисуем частицы
+    for (const particle of bottomWallEffect.particles) {
+      ctx.save();
+      ctx.globalAlpha = particle.life;
+      ctx.fillStyle = particle.color;
+      ctx.beginPath();
+      ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  }
+
   // Draw hex with vertical gradient
   function drawHex(x,y,r,color,scale=1,alpha=1){
     ctx.save();
@@ -262,7 +364,7 @@
 
   // Бесконечный режим
   function startInfiniteMode(){
-    titleEl.textContent = 'Hexanoid — Infinite Mode v3';
+    titleEl.textContent = 'Hexanoid — Infinite Mode v4';
     hexBricks = [];
     balls = [];
     powerups = [];
@@ -276,6 +378,12 @@
     lastSpeedIncreaseTime = gameStartTime;
     currentBrickSpeed = baseBrickSpeed;
     INFINITE_SETTINGS.powerupChance = INFINITE_SETTINGS.basePowerupChance;
+    APPEARANCE_SETTINGS.rowAppearanceStates.clear();
+    bottomWallEffect = {
+      active: false,
+      particles: [],
+      glowAlpha: 0
+    };
     
     // Создаем стартовый шар
     createBall();
@@ -399,6 +507,13 @@
     const gridSize = HEX_RADIUS * 2.2;
     const maxAttempts = 50;
     const newBricks = [];
+    const rowId = Date.now() + Math.random();
+    
+    // Добавляем состояние для нового ряда (ускоренное появление)
+    APPEARANCE_SETTINGS.rowAppearanceStates.set(rowId, {
+      appeared: false,
+      bricksCount: bricksInRow
+    });
     
     for(let i=0; i<bricksInRow; i++){
       let attempts = 0;
@@ -406,7 +521,7 @@
       
       while(!placed && attempts < maxAttempts){
         const x = randInt(HEX_RADIUS, canvas.width - HEX_RADIUS);
-        const y = -HEX_RADIUS - yOffset;
+        const y = -HEX_RADIUS * 3 - yOffset; // Начинаем выше, чтобы было видно ускоренное появление
         
         // Проверяем пересечение с существующими кирпичами
         let collides = false;
@@ -433,7 +548,9 @@
             removing: false,
             removeStart: 0,
             containsPowerup: containsPowerup,
-            powerupType: containsPowerup
+            powerupType: containsPowerup,
+            rowId: rowId,
+            appeared: false // Флаг, появился ли кирпич на экране
           });
           placed = true;
         }
@@ -522,6 +639,7 @@
           break;
           
         case 'bottomwall':
+          bottomWallEffect.active = true;
           showMessage(`Активирован: ${type.name}`, type.color);
           break;
       }
@@ -529,8 +647,9 @@
   }
 
   // Обновление активных бонусов
-  function updateActivePowerups(){
-    const now = performance.now();
+  function updateActivePowerups(now){
+    // Обновляем состояние нижней стенки
+    bottomWallEffect.active = activeEffects.has('bottomwall');
     
     // Удаляем истекшие эффекты
     for(const [id, effect] of activeEffects){
@@ -542,19 +661,51 @@
           case 'pierce':
             balls.forEach(ball => ball.pierce = false);
             break;
+          case 'bottomwall':
+            bottomWallEffect.active = false;
+            break;
         }
       }
     }
   }
 
-  // Обновление кирпичей
+  // Обновление кирпичей с ускоренным появлением
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
-    // Двигаем кирпичи вниз, если нет заморозки
     if(!freezeActive){
+      // Проверяем состояние появления для каждого ряда
+      const rowStates = new Map();
+      
       for(const brick of hexBricks){
-        brick.y += currentBrickSpeed;
+        if(!rowStates.has(brick.rowId)){
+          rowStates.set(brick.rowId, {
+            anyBrickAppeared: false,
+            allBricksAppeared: true
+          });
+        }
+        
+        const state = rowStates.get(brick.rowId);
+        const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(brick.rowId);
+        
+        // Определяем скорость движения для кирпича
+        let speedMultiplier = APPEARANCE_SETTINGS.normalSpeedMultiplier;
+        
+        if(rowState && !rowState.appeared){
+          // Если ряд еще не появился, используем ускоренную скорость
+          speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
+          
+          // Проверяем, появился ли кирпич на экране
+          if(brick.y + HEX_RADIUS > 0){
+            brick.appeared = true;
+            state.anyBrickAppeared = true;
+          }
+        } else {
+          brick.appeared = true;
+        }
+        
+        // Двигаем кирпич
+        brick.y += currentBrickSpeed * speedMultiplier;
         
         // Проверка достижения нижней границы
         if(brick.y + HEX_RADIUS > INFINITE_SETTINGS.gameOverLine && !brick.hit){
@@ -562,6 +713,23 @@
           brick.hit = true;
           brick.removing = true;
           brick.removeStart = now;
+        }
+        
+        // Обновляем состояние появления ряда
+        if(rowState && !brick.appeared){
+          state.allBricksAppeared = false;
+        }
+      }
+      
+      // Обновляем глобальное состояние рядов
+      for(const [rowId, state] of rowStates){
+        const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(rowId);
+        if(rowState){
+          // Если хотя бы один кирпич появился, отмечаем весь ряд как появившийся
+          if(state.anyBrickAppeared && !rowState.appeared){
+            rowState.appeared = true;
+            showMessage(`Ряд появился`, '#4cc98a');
+          }
         }
       }
     }
@@ -685,7 +853,15 @@
           drawHex(b.x, b.y, HEX_RADIUS, b.color, Math.max(0, 1.15 * (1 - p)), Math.max(0, 1 - p));
         }
       } else if (!b.hit) {
-        drawHex(b.x, b.y, HEX_RADIUS, b.color);
+        // Показываем индикатор ускоренного появления
+        const rowState = APPEARANCE_SETTINGS.rowAppearanceStates.get(b.rowId);
+        let alpha = 1;
+        if (rowState && !rowState.appeared && b.y < -HEX_RADIUS) {
+          // Кипричи еще не появились - делаем их полупрозрачными
+          alpha = 0.4;
+        }
+        
+        drawHex(b.x, b.y, HEX_RADIUS, b.color, 1, alpha);
         
         // Рисуем иконку бонуса в кирпиче
         if(b.containsPowerup){
@@ -694,7 +870,7 @@
           ctx.font = '14px Arial';
           ctx.textAlign = 'center';
           ctx.textBaseline = 'middle';
-          ctx.globalAlpha = 0.9;
+          ctx.globalAlpha = 0.9 * alpha;
           ctx.fillText(b.containsPowerup.icon, b.x, b.y);
           ctx.restore();
         }
@@ -716,6 +892,9 @@
     ctx.fillRect(paddle.x + 4*zoneW, paddle.y, zoneW, paddle.height);
     ctx.globalAlpha = 1;
 
+    // Эффект нижней стенки
+    drawBottomWallEffect();
+
     // Линия проигрыша
     ctx.strokeStyle = '#ff4444';
     ctx.setLineDash([5, 5]);
@@ -725,19 +904,6 @@
     ctx.lineTo(canvas.width, INFINITE_SETTINGS.gameOverLine);
     ctx.stroke();
     ctx.setLineDash([]);
-    
-    // Нижняя стенка (если бонус активен)
-    const bottomWallActive = activeEffects.has('bottomwall');
-    if(bottomWallActive){
-      ctx.strokeStyle = '#1abc9c';
-      ctx.setLineDash([3, 3]);
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(0, canvas.height);
-      ctx.lineTo(canvas.width, canvas.height);
-      ctx.stroke();
-      ctx.setLineDash([]);
-    }
     
     // Индикатор пробивного режима
     const pierceActive = activeEffects.has('pierce');
@@ -919,9 +1085,13 @@
       const bottomWallActive = activeEffects.has('bottomwall');
       
       if(bottomWallActive){
-        // Отскок от нижней границы
+        // Отскок от нижней границы с эффектом
         ball.y = canvas.height - ball.radius;
-        ball.dy = -Math.abs(ball.dy);
+        ball.dy = -Math.abs(ball.dy) * 1.1; // Немного увеличиваем скорость отскока
+        
+        // Создаем частицы эффекта
+        createBottomWallParticles(ball.x, canvas.height - 5, 12);
+        
         // Эффект отскока
         showMessage('Отскок!', '#1abc9c');
       } else {
@@ -1009,7 +1179,8 @@
         
         updateBricks(now);
         updatePowerups();
-        updateActivePowerups();
+        updateActivePowerups(now);
+        updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
       }
