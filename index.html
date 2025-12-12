@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Infinite Mode</title>
+<title>Hexanoid — Infinite Mode v2</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -22,12 +22,13 @@
   .powerup-freeze{background:linear-gradient(45deg, #4d96ff, #6bc5ff);}
   .powerup-pierce{background:linear-gradient(45deg, #9b59b6, #8e44ad);}
   .powerup-triple{background:linear-gradient(45deg, #f39c12, #e67e22);}
+  .powerup-bottomwall{background:linear-gradient(45deg, #1abc9c, #16a085);}
   @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
 </style>
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Infinite Mode</div>
+    <div id="title">Hexanoid — Infinite Mode v2</div>
 
     <div class="mode-select">
       <label for="modeSelect">Режим:</label>
@@ -42,16 +43,16 @@
     </div>
 
     <div class="speed-control">
-      <label for="speedSlider">Скорость кирпичей:</label>
-      <input type="range" id="speedSlider" min="0.01" max="0.1" step="0.01" value="0.02" style="width: 150px;">
-      <span id="speedValue">0.02</span>
+      <label for="speedSlider">Баз. скорость:</label>
+      <input type="range" id="speedSlider" min="0.02" max="0.1" step="0.01" value="0.04" style="width: 150px;">
+      <span id="speedValue">0.04</span>
     </div>
 
     <div class="frame">
       <canvas id="gameCanvas" width="900" height="540" aria-label="game canvas"></canvas>
     </div>
 
-    <div id="status">Счет: 0 | Жизни: 3</div>
+    <div id="status">Счет: 0 | Жизни: 3 | Время: 0:00</div>
     <div id="activePowerups"></div>
     <div class="controls">
       <button id="restartBtn">Restart</button>
@@ -79,10 +80,10 @@
   // Game state
   const HEX_RADIUS = 24;
   let hexBricks = [];
-  let balls = []; // Множество шаров
-  let ballTrails = new Map(); // Треки для каждого шара
-  let powerups = []; // Активные бонусы
-  let activeEffects = new Map(); // Активные эффекты бонусов
+  let balls = [];
+  let ballTrails = new Map();
+  let powerups = [];
+  let activeEffects = new Map();
   let paddle = { x: 0, y: 0, width: 120, height: 12, speed: 8 };
   let running = true;
   let paused = false;
@@ -91,18 +92,25 @@
   let lives = 3;
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let brickSpeed = 0.02; // Базовая скорость движения кирпичей
+  let baseBrickSpeed = 0.04; // Базовая скорость движения кирпичей
+  let currentBrickSpeed = 0.04; // Текущая скорость с учетом прогресса
   let spawnTimer = 0;
-  const SPAWN_INTERVAL = 2000; // Интервал появления новых кирпичей (мс)
+  const SPAWN_INTERVAL = 2000;
+  let gameStartTime = 0;
+  let lastSpeedIncreaseTime = 0;
+  const SPEED_INCREASE_INTERVAL = 60000; // 1 минута
+  const SPEED_INCREASE_AMOUNT = 0.01;
   
   // Настройки бесконечного режима
   const INFINITE_SETTINGS = {
     maxBricksPerRow: 8,
     minBricksPerRow: 2,
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
-    powerupColors: ['#ff6b6b', '#4d96ff', '#9b59b6', '#f39c12'], // Разные цвета для разных бонусов
-    powerupChance: 0.15, // 15% шанс появления бонуса
-    gameOverLine: 500 // Линия, при достижении которой игра заканчивается
+    powerupChance: 0.15,
+    basePowerupChance: 0.15,
+    powerupChanceIncrease: 0.02, // Увеличение шанса каждую минуту
+    maxPowerupChance: 0.35,
+    gameOverLine: 500
   };
 
   // Типы бонусов
@@ -110,30 +118,37 @@
     MULTIBALL: { 
       id: 'multiball', 
       name: 'Мультишар', 
-      duration: 10000, // 10 секунд
+      duration: 10000,
       color: '#ff6b6b',
       icon: '⚽'
     },
     FREEZE: { 
       id: 'freeze', 
       name: 'Заморозка', 
-      duration: 8000, // 8 секунд
+      duration: 8000,
       color: '#4d96ff',
       icon: '❄️'
     },
     PIERCE: { 
       id: 'pierce', 
       name: 'Пробивной', 
-      duration: 12000, // 12 секунд
+      duration: 12000,
       color: '#9b59b6',
       icon: '💥'
     },
     TRIPLE: { 
       id: 'triple', 
       name: 'Тройной', 
-      duration: 7000, // 7 секунд
+      duration: 7000,
       color: '#f39c12',
       icon: '🔶'
+    },
+    BOTTOMWALL: { 
+      id: 'bottomwall', 
+      name: 'Нижняя стенка', 
+      duration: 15000,
+      color: '#1abc9c',
+      icon: '⬇️'
     }
   };
 
@@ -148,10 +163,11 @@
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
 
-  // Speed slider
+  // Speed slider - теперь только для базовой скорости
   speedSlider.addEventListener('input', (e) => {
-    brickSpeed = parseFloat(e.target.value);
-    speedValue.textContent = brickSpeed.toFixed(2);
+    baseBrickSpeed = parseFloat(e.target.value);
+    currentBrickSpeed = baseBrickSpeed; // Обновляем текущую скорость
+    speedValue.textContent = baseBrickSpeed.toFixed(2);
   });
 
   // Mode selection
@@ -187,7 +203,7 @@
     paddle.width = Math.max(60, Math.min(260, Math.floor(canvas.width * 0.14)));
     paddle.x = clamp(paddle.x || (canvas.width - paddle.width) / 2, 0, canvas.width - paddle.width);
     paddle.y = canvas.height - 18;
-    INFINITE_SETTINGS.gameOverLine = canvas.height - 50; // Линия проигрыша
+    INFINITE_SETTINGS.gameOverLine = canvas.height - 50;
   }
   window.addEventListener('resize', resizeCanvas);
 
@@ -249,7 +265,7 @@
 
   // Бесконечный режим
   function startInfiniteMode(){
-    titleEl.textContent = 'Hexanoid — Бесконечный режим';
+    titleEl.textContent = 'Hexanoid — Бесконечный режим v2';
     hexBricks = [];
     balls = [];
     powerups = [];
@@ -259,6 +275,10 @@
     levelComplete = false;
     paused = false;
     spawnTimer = performance.now();
+    gameStartTime = performance.now();
+    lastSpeedIncreaseTime = gameStartTime;
+    currentBrickSpeed = baseBrickSpeed;
+    INFINITE_SETTINGS.powerupChance = INFINITE_SETTINGS.basePowerupChance;
     
     // Создаем стартовый шар
     createBall();
@@ -268,8 +288,44 @@
       spawnBrickRow(i * 60);
     }
     
-    statusEl.textContent = `Счет: ${score} | Жизни: ${lives}`;
+    updateStatus();
     updateActivePowerups();
+  }
+
+  // Обновление статуса
+  function updateStatus() {
+    const now = performance.now();
+    const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    
+    statusEl.textContent = `Счет: ${score} | Жизни: ${lives} | Время: ${minutes}:${seconds.toString().padStart(2, '0')} | Скорость: ${currentBrickSpeed.toFixed(2)}`;
+  }
+
+  // Проверка увеличения скорости
+  function checkSpeedIncrease(now) {
+    if (now - lastSpeedIncreaseTime > SPEED_INCREASE_INTERVAL) {
+      currentBrickSpeed += SPEED_INCREASE_AMOUNT;
+      INFINITE_SETTINGS.powerupChance = Math.min(
+        INFINITE_SETTINGS.maxPowerupChance,
+        INFINITE_SETTINGS.powerupChance + INFINITE_SETTINGS.powerupChanceIncrease
+      );
+      lastSpeedIncreaseTime = now;
+      
+      // Визуальный эффект увеличения скорости
+      showMessage(`Скорость увеличена! (${currentBrickSpeed.toFixed(2)})`, '#4cc98a');
+    }
+  }
+
+  // Показать сообщение на экране
+  let messageText = '';
+  let messageTimer = 0;
+  let messageColor = '#fff';
+  
+  function showMessage(text, color = '#fff') {
+    messageText = text;
+    messageColor = color;
+    messageTimer = performance.now();
   }
 
   // Создание нового шара
@@ -281,7 +337,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: false, // Пробивной режим
+      pierce: false,
       trail: []
     };
     balls.push(ball);
@@ -302,7 +358,7 @@
       
       while(!placed && attempts < maxAttempts){
         const x = randInt(HEX_RADIUS, canvas.width - HEX_RADIUS);
-        const y = -HEX_RADIUS - yOffset; // Начинаем выше экрана
+        const y = -HEX_RADIUS - yOffset;
         
         // Проверяем пересечение с существующими кирпичами
         let collides = false;
@@ -388,16 +444,15 @@
       // Применяем немедленный эффект
       switch(type.id){
         case 'multiball':
-          // Создаем дополнительный шар
           const newBall = createBall();
           newBall.x = paddle.x + paddle.width / 2;
           newBall.y = paddle.y - newBall.radius;
           newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
           newBall.dy = -4;
+          showMessage(`Активирован: ${type.name}`, type.color);
           break;
           
         case 'triple':
-          // Создаем два дополнительных шара
           for(let i=0; i<2; i++){
             const tripleBall = createBall();
             tripleBall.x = paddle.x + paddle.width / 2;
@@ -406,15 +461,20 @@
             tripleBall.dx = 4 * Math.cos(angle);
             tripleBall.dy = -Math.abs(4 * Math.sin(angle));
           }
+          showMessage(`Активирован: ${type.name}`, type.color);
           break;
           
         case 'freeze':
-          // Заморозка уже обрабатывается в updateBricks
+          showMessage(`Активирован: ${type.name}`, type.color);
           break;
           
         case 'pierce':
-          // Включаем пробивной режим для всех шаров
           balls.forEach(ball => ball.pierce = true);
+          showMessage(`Активирован: ${type.name}`, type.color);
+          break;
+          
+        case 'bottomwall':
+          showMessage(`Активирован: ${type.name}`, type.color);
           break;
       }
     }
@@ -432,8 +492,10 @@
         activeEffects.delete(id);
         
         // Отменяем эффекты
-        if(id === 'pierce'){
-          balls.forEach(ball => ball.pierce = false);
+        switch(id){
+          case 'pierce':
+            balls.forEach(ball => ball.pierce = false);
+            break;
         }
       }
     }
@@ -459,7 +521,7 @@
     // Двигаем кирпичи вниз, если нет заморозки
     if(!freezeActive){
       for(const brick of hexBricks){
-        brick.y += brickSpeed;
+        brick.y += currentBrickSpeed;
         
         // Проверка достижения нижней границы
         if(brick.y + HEX_RADIUS > INFINITE_SETTINGS.gameOverLine && !brick.hit){
@@ -472,7 +534,8 @@
     }
     
     // Удаляем уничтоженные кирпичи
-    hexBricks = hexBricks.filter(brick => {
+    for(let i = hexBricks.length - 1; i >= 0; i--){
+      const brick = hexBricks[i];
       if(brick.hit && brick.removing){
         const tt = now - brick.removeStart;
         if(tt > 360){
@@ -481,11 +544,10 @@
             spawnPowerup(brick.x, brick.y, brick.powerupType);
           }
           score += 100;
-          return false;
+          hexBricks.splice(i, 1);
         }
       }
-      return true;
-    });
+    }
     
     // Спавн новых кирпичей
     if(now - spawnTimer > SPAWN_INTERVAL){
@@ -507,7 +569,7 @@
         ballTrails.set(balls[0].id, []);
         resetBall(balls[0]);
       }
-      statusEl.textContent = `Счет: ${score} | Жизни: ${lives}`;
+      showMessage(`Потеряна жизнь! Осталось: ${lives}`, '#ff4444');
     }
   }
 
@@ -523,8 +585,45 @@
   // Game Over
   function gameOver(){
     running = false;
-    statusEl.textContent = `Игра окончена! Счет: ${score}`;
-    alert(`Игра окончена!\nВаш счет: ${score}\nНажмите Restart чтобы играть снова.`);
+    const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    
+    statusEl.textContent = `Игра окончена! Счет: ${score} | Время: ${minutes}:${seconds.toString().padStart(2, '0')}`;
+    
+    // Создаем красивый экран окончания игры
+    drawGameOverScreen();
+    
+    setTimeout(() => {
+      alert(`Игра окончена!\nВаш счет: ${score}\nВремя выживания: ${minutes}:${seconds.toString().padStart(2, '0')}\nНажмите Restart чтобы играть снова.`);
+    }, 100);
+  }
+
+  // Рисуем экран окончания игры
+  function drawGameOverScreen(){
+    ctx.save();
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+    
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 48px system-ui, Arial';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 60);
+    
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px system-ui, Arial';
+    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 - 10);
+    
+    const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width/2, canvas.height/2 + 30);
+    
+    ctx.font = '18px system-ui, Arial';
+    ctx.fillText('Нажмите Restart для новой игры', canvas.width/2, canvas.height/2 + 80);
+    
+    ctx.restore();
   }
 
   // Draw scene
@@ -591,10 +690,30 @@
     ctx.stroke();
     ctx.setLineDash([]);
     
+    // Нижняя стенка (если бонус активен)
+    const bottomWallActive = activeEffects.has('bottomwall');
+    if(bottomWallActive){
+      ctx.strokeStyle = '#1abc9c';
+      ctx.setLineDash([3, 3]);
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(0, canvas.height);
+      ctx.lineTo(canvas.width, canvas.height);
+      ctx.stroke();
+      ctx.setLineDash([]);
+    }
+    
     // Индикатор пробивного режима
     const pierceActive = activeEffects.has('pierce');
     if(pierceActive){
       ctx.fillStyle = 'rgba(155, 89, 182, 0.3)';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+    }
+
+    // Индикатор заморозки
+    const freezeActive = activeEffects.has('freeze');
+    if(freezeActive){
+      ctx.fillStyle = 'rgba(77, 150, 255, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -632,12 +751,25 @@
     ctx.fillText(`Счет: ${score}`, 10, 20);
     ctx.fillText(`Жизни: ${lives}`, 10, 40);
     ctx.fillText(`Шаров: ${balls.length}`, 10, 60);
-    ctx.fillText(`Скорость: ${brickSpeed.toFixed(2)}`, canvas.width - 120, 20);
+    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, 20);
+    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, 40);
     
-    // Индикатор заморозки
-    if(activeEffects.has('freeze')){
-      ctx.fillStyle = '#4d96ff';
-      ctx.fillText('❄️ ЗАМОРОЗКА', canvas.width - 120, 40);
+    // Время игры
+    const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
+    const minutes = Math.floor(elapsedSeconds / 60);
+    const seconds = elapsedSeconds % 60;
+    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
+    
+    // Сообщение
+    if (messageText && now - messageTimer < 2000) {
+      const alpha = Math.min(1, (2000 - (now - messageTimer)) / 1000);
+      ctx.fillStyle = messageColor;
+      ctx.globalAlpha = alpha;
+      ctx.font = 'bold 20px system-ui, Arial';
+      ctx.textAlign = 'center';
+      ctx.fillText(messageText, canvas.width/2, 40);
+      ctx.textAlign = 'left';
+      ctx.globalAlpha = 1;
     }
     
     // Игра на паузе
@@ -712,8 +844,8 @@
         b.hit = true;
         b.removing = true;
         b.removeStart = now;
-        score += 150; // Дополнительные очки за пробивной режим
-        continue; // Продолжаем движение без отскока
+        score += 150;
+        continue;
       }
 
       let collided = false;
@@ -746,17 +878,27 @@
       if (collided) break;
     }
 
-    // fallen below
+    // fallen below - с учетом бонуса "Нижняя стенка"
     if (ball.y - ball.radius > canvas.height){
-      // Удаляем шар, если он не последний
-      if(balls.length > 1){
-        const index = balls.indexOf(ball);
-        if(index > -1){
-          balls.splice(index, 1);
-          ballTrails.delete(ball.id);
-        }
+      const bottomWallActive = activeEffects.has('bottomwall');
+      
+      if(bottomWallActive){
+        // Отскок от нижней границы
+        ball.y = canvas.height - ball.radius;
+        ball.dy = -Math.abs(ball.dy);
+        // Эффект отскока
+        showMessage('Отскок!', '#1abc9c');
       } else {
-        loseLife();
+        // Иначе теряем шар или жизнь
+        if(balls.length > 1){
+          const index = balls.indexOf(ball);
+          if(index > -1){
+            balls.splice(index, 1);
+            ballTrails.delete(ball.id);
+          }
+        } else {
+          loseLife();
+        }
       }
     }
   }
@@ -793,7 +935,6 @@
     if(modeSelect.value === 'infinite'){
       startInfiniteMode();
     } else {
-      // Для режима уровней
       loadLevel(levelSelect.value || levelConfigs[0].value);
     }
   });
@@ -827,13 +968,14 @@
       
       // Обновление игры только в бесконечном режиме
       if(modeSelect.value === 'infinite'){
+        // Проверяем увеличение скорости
+        checkSpeedIncrease(now);
+        
         updateBricks(now);
         updatePowerups();
         updateActivePowerups();
         moveBalls(now);
-        
-        // Обновляем статус
-        statusEl.textContent = `Счет: ${score} | Жизни: ${lives} | Шаров: ${balls.length}`;
+        updateStatus();
       }
     }
 
@@ -847,16 +989,20 @@
   window.addEventListener('keydown', e => { 
     keys[e.key] = true;
     // Пробел для запуска шара
-    if(e.key === ' ' && balls.length === 1){
+    if(e.key === ' ' && balls.length === 1 && !paused && running){
       balls[0].dx = 4 * (Math.random() < 0.5 ? 1 : -1);
       balls[0].dy = -4;
+    }
+    // P для паузы
+    if(e.key === 'p' || e.key === 'P'){
+      paused = !paused;
+      pauseBtn.textContent = paused ? 'Resume' : 'Pause';
     }
   });
   window.addEventListener('keyup', e => { keys[e.key] = false; });
 
-  // Функция загрузки уровня (для режима уровней)
+  // Функция загрузки уровня (заглушка)
   async function loadLevel(path){
-    // Реализация загрузки уровней из JSON файлов
     try {
       const res = await fetch(path, { cache: 'no-store' });
       if (!res.ok) throw new Error('fetch failed ' + res.status);
