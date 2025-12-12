@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width,initial-scale=1" />
-<title>Hexanoid — Scrolling Bricks</title>
+<title>Hexanoid — Smooth Scroll</title>
 <style>
   :root{--bg:#0b0b0b;--frame:#141414;--accent:#3ee}
   html,body{height:100%;margin:0;background:var(--bg);color:#ddd;font-family:system-ui,Arial,sans-serif}
@@ -23,7 +23,7 @@
 </head>
 <body>
   <div id="app">
-    <div id="title">Hexanoid — Scrolling Bricks</div>
+    <div id="title">Hexanoid — Smooth Scroll</div>
 
     <div class="level-select">
       <label for="levelSelect">Уровень:</label>
@@ -34,8 +34,8 @@
     </div>
 
     <div class="speed-control">
-      <label for="speedSlider">Скорость рядов:</label>
-      <input type="range" id="speedSlider" min="0.1" max="5" step="0.1" value="1" style="width: 150px;">
+      <label for="speedSlider">Скорость скролла:</label>
+      <input type="range" id="speedSlider" min="0.2" max="3" step="0.1" value="1" style="width: 150px;">
       <span id="speedValue">1.0</span>
     </div>
 
@@ -68,8 +68,6 @@
   // Game state
   let HEX_RADIUS = 20;
   let hexBricks = [];
-  let activeRows = []; // Активные ряды кирпичей
-  let allBrickPositions = []; // Все позиции кирпичей уровня
   let ball = { x: 0, y: 0, dx: 3.8, dy: -3.8, radius: 8 };
   let paddle = { x: 0, y: 0, width: 120, height: 12, speed: 8 };
   let trail = [];
@@ -80,9 +78,9 @@
   let completedLevels = new Set();
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let rowSpeed = 1.0; // Скорость движения рядов
-  let nextRowTimer = 0;
-  let nextRowInterval = 2000; // Интервал появления новых рядов (мс)
+  let scrollSpeed = 1.0; // Скорость скролла
+  let scrollOffset = 0; // Смещение для скролла
+  let isScrolling = true; // Флаг скролла
   
   // Level catalog: extend this list to add new levels
   const levelConfigs = [
@@ -102,8 +100,8 @@
 
   // Speed slider
   speedSlider.addEventListener('input', (e) => {
-    rowSpeed = parseFloat(e.target.value);
-    speedValue.textContent = rowSpeed.toFixed(1);
+    scrollSpeed = parseFloat(e.target.value);
+    speedValue.textContent = scrollSpeed.toFixed(1);
   });
 
   function populateLevelSelect(){
@@ -169,44 +167,15 @@
     ctx.restore();
   }
 
-  // Функция для группировки кирпичей по рядам (по координате Y)
-  function groupBricksByRows(positions, tolerance = 15) {
-    const rows = [];
-    const sorted = [...positions].sort((a, b) => a.y - b.y);
-    
-    for (const pos of sorted) {
-      let foundRow = false;
-      for (const row of rows) {
-        // Проверяем, близка ли позиция по Y к существующему ряду
-        if (Math.abs(pos.y - row.y) < tolerance) {
-          row.bricks.push(pos);
-          foundRow = true;
-          break;
-        }
-      }
-      if (!foundRow) {
-        rows.push({
-          y: pos.y,
-          bricks: [pos],
-          active: false,
-          activeY: -HEX_RADIUS * 2 // Начинаем выше экрана
-        });
-      }
-    }
-    
-    // Сортируем ряды по Y (сверху вниз)
-    rows.sort((a, b) => a.y - b.y);
-    return rows;
-  }
-
   // Load level
   async function loadLevel(path = currentLevel || cycleLevels[0] || 'Levels/level1.json'){
     try {
       statusEl.textContent = 'Загрузка уровня...';
       levelComplete = false;
       nextLevelBtn.style.display = 'none';
-      activeRows = [];
       hexBricks = [];
+      scrollOffset = 0;
+      isScrolling = true;
       
       const res = await fetch(path, { cache: 'no-store' });
       if (!res.ok) throw new Error('fetch failed ' + res.status);
@@ -215,29 +184,26 @@
       
       const raw = Array.isArray(data.centers) ? data.centers : [];
       const norm = normalizeCentersToCanvas(raw, canvas.width, canvas.height, 12);
-      allBrickPositions = norm;
       
-      // Группируем кирпичи по рядам
-      const rows = groupBricksByRows(norm);
+      // Создаем все кирпичи сразу, но начнем их рисовать сверху
+      const topOffset = -canvas.height; // Начинаем полностью выше экрана
       
-      // Инициализируем активные ряды
-      if (rows.length > 0) {
-        // Активируем первый ряд
-        rows[0].active = true;
-        rows[0].activeY = -HEX_RADIUS * 2;
-        activeRows = rows;
-        
-        // Создаем кирпичи для активного ряда
-        createBricksForActiveRows();
-      }
+      hexBricks = norm.map(c => ({
+        x: c.x,
+        y: c.y + topOffset, // Начальная позиция выше экрана
+        originalY: c.y,     // Финальная позиция
+        color: randColor(),
+        hit: false,
+        removing: false,
+        removeStart: 0
+      }));
       
       currentLevel = path;
       const meta = levelMetaMap.get(path);
       const levelLabel = meta ? meta.label : path.split('/').pop();
       titleEl.textContent = `Hexanoid — ${levelLabel}`;
-      statusEl.textContent = `Загружено: ${norm.length} кирпичей в ${rows.length} рядах`;
+      statusEl.textContent = `Загружено: ${hexBricks.length} кирпичей, скролл...`;
       resetBall();
-      nextRowTimer = performance.now();
       
       // Update level select
       levelSelect.value = path;
@@ -262,74 +228,31 @@
         fileAccessWarningShown = true;
         alert('Браузер не разрешает fetch() файлов при открытии HTML напрямую. Запустите в папке "Hexanoid" локальный сервер, например:\n\npython -m http.server 8000\n\nЗатем откройте http://localhost:8000/hexanoid.html');
       }
-      allBrickPositions = [];
-      activeRows = [];
       hexBricks = [];
       return false;
     }
   }
 
-  // Создаем кирпичи для активных рядов
-  function createBricksForActiveRows() {
-    for (const row of activeRows) {
-      if (row.active) {
-        for (const pos of row.bricks) {
-          // Создаем кирпич в текущей позиции ряда
-          hexBricks.push({
-            x: pos.x,
-            y: row.activeY,
-            originalX: pos.x,
-            originalY: pos.y,
-            color: randColor(),
-            hit: false,
-            removing: false,
-            removeStart: 0,
-            rowY: row.activeY
-          });
-        }
-      }
-    }
-  }
-
-  // Обновляем позиции кирпичей в активных рядах
-  function updateActiveRows(now) {
-    // Проверяем, нужно ли активировать новый ряд
-    if (now - nextRowTimer > nextRowInterval) {
-      // Ищем неактивный ряд для активации
-      const inactiveRowIndex = activeRows.findIndex(row => !row.active);
-      if (inactiveRowIndex !== -1) {
-        activeRows[inactiveRowIndex].active = true;
-        activeRows[inactiveRowIndex].activeY = -HEX_RADIUS * 2;
-        createBricksForActiveRows();
-      }
-      nextRowTimer = now;
+  // Обновляем скролл
+  function updateScroll() {
+    if (!isScrolling) return;
+    
+    // Увеличиваем смещение (кирпичи движутся вниз)
+    scrollOffset += scrollSpeed;
+    
+    // Обновляем позиции всех кирпичей
+    for (const brick of hexBricks) {
+      brick.y = brick.originalY - canvas.height + scrollOffset;
     }
     
-    // Обновляем позиции активных рядов
-    for (const row of activeRows) {
-      if (row.active) {
-        // Двигаем ряд вниз
-        row.activeY += rowSpeed;
-        
-        // Обновляем позиции кирпичей этого ряда
-        for (const brick of hexBricks) {
-          if (Math.abs(brick.y - brick.rowY) < 1) { // Кирпич принадлежит этому ряду
-            brick.y = row.activeY;
-            brick.rowY = row.activeY;
-          }
-        }
-        
-        // Если ряд достиг своей целевой позиции, деактивируем его
-        if (row.activeY >= row.y) {
-          row.active = false;
-          // Устанавливаем кирпичи на их финальные позиции
-          for (const brick of hexBricks) {
-            if (Math.abs(brick.originalY - row.y) < 1) {
-              brick.y = brick.originalY;
-            }
-          }
-        }
+    // Когда все кирпичи достигли своих позиций, останавливаем скролл
+    if (scrollOffset >= canvas.height) {
+      isScrolling = false;
+      // Устанавливаем кирпичи на финальные позиции
+      for (const brick of hexBricks) {
+        brick.y = brick.originalY;
       }
+      statusEl.textContent = `Готово! Осталось ${remainingBrickCount()} кирпичей`;
     }
   }
 
@@ -351,9 +274,7 @@
   // Check if level is complete
   function checkLevelCompletion() {
     if (!hexBricks.length) return false;
-    // Проверяем, все ли ряды активны или завершили движение
-    const allRowsInactive = activeRows.every(row => !row.active);
-    return allRowsInactive && remainingBrickCount() === 0;
+    return remainingBrickCount() === 0 && !isScrolling;
   }
 
   // Load next level
@@ -434,7 +355,8 @@
         } else {
           b.toRemove = true;
         }
-      } else if (!b.hit) {
+      } else if (!b.hit && b.y + HEX_RADIUS > 0 && b.y - HEX_RADIUS < canvas.height) {
+        // Рисуем только кирпичи, которые находятся в видимой области
         drawHex(b.x, b.y, HEX_RADIUS, b.color);
       }
     }
@@ -470,11 +392,13 @@
     ctx.fillStyle = '#ddd';
     ctx.font = '12px system-ui, Arial';
     ctx.fillText(`Кирпичей: ${remainingBrickCount()}`, 10, canvas.height - 10);
-    ctx.fillText(`Скорость: ${rowSpeed.toFixed(1)}`, 10, canvas.height - 30);
+    ctx.fillText(`Скорость: ${scrollSpeed.toFixed(1)}`, 10, canvas.height - 30);
     
-    // Отображаем активные ряды
-    const activeRowCount = activeRows.filter(r => r.active).length;
-    ctx.fillText(`Активных рядов: ${activeRowCount}`, canvas.width - 120, canvas.height - 10);
+    // Отображаем прогресс скролла
+    if (isScrolling) {
+      const progress = Math.min(100, (scrollOffset / canvas.height) * 100);
+      ctx.fillText(`Загрузка уровня: ${progress.toFixed(0)}%`, canvas.width - 150, canvas.height - 10);
+    }
     
     if (levelComplete) {
       ctx.fillStyle = '#4cc98a';
@@ -499,6 +423,9 @@
 
   function moveBall(now){
     if (levelComplete) return;
+    
+    // Обновляем скролл
+    updateScroll();
     
     ball.x += ball.dx;
     ball.y += ball.dy;
@@ -562,9 +489,6 @@
       }
       if (collided) break;
     }
-
-    // Обновляем активные ряды
-    updateActiveRows(now);
 
     // Check level completion
     if (checkLevelCompletion() && !levelComplete) {
@@ -659,7 +583,7 @@
   requestAnimationFrame(loop);
 
   // Expose for debug
-  window.__hexanoid = { loadLevel, hexBricks, completedLevels, activeRows, rowSpeed };
+  window.__hexanoid = { loadLevel, hexBricks, completedLevels, scrollSpeed, isScrolling };
 })();
 </script>
 </body>
