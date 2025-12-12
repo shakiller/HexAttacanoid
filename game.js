@@ -36,11 +36,11 @@
   const SPEED_INCREASE_INTERVAL = 60000;
   const SPEED_INCREASE_AMOUNT = 0.01;
   
-  // Настройки ускоренного появления - УПРОЩЕНО
+  // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
     fastSpeedMultiplier: 5,
     normalSpeedMultiplier: 1,
-    hasVisibleBrick: false
+    hasFullyVisibleBrick: false
   };
   
   // Эффекты для нижней стенки
@@ -321,7 +321,7 @@
     lastSpeedIncreaseTime = gameStartTime;
     currentBrickSpeed = baseBrickSpeed;
     INFINITE_SETTINGS.powerupChance = INFINITE_SETTINGS.basePowerupChance;
-    APPEARANCE_SETTINGS.hasVisibleBrick = false;
+    APPEARANCE_SETTINGS.hasFullyVisibleBrick = false;
     bottomWallEffect = {
       active: false,
       particles: [],
@@ -330,8 +330,8 @@
     
     createBall();
     
-    // Создаем первый ряд за пределами поля
-    spawnBrickRow(-100);
+    // Создаем первый ряд за пределами поля (выше экрана)
+    spawnBrickRow(-HEX_RADIUS * 3);
     
     updateStatus();
   }
@@ -607,28 +607,29 @@
     }
   }
 
-  // Обновление кирпичей - УПРОЩЕНО
+  // Обновление кирпичей - ИСПРАВЛЕНО
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
     if(!freezeActive){
       // Проверяем, есть ли на поле полностью видимый кирпич
-      let hasVisibleBrick = false;
+      // Кирпич считается полностью видимым, когда его ВЕРХНЯЯ часть (y - HEX_RADIUS) > 0
+      let hasFullyVisibleBrick = false;
       for(const brick of hexBricks){
-        if(brick.y + HEX_RADIUS > 0 && !brick.hit){
-          hasVisibleBrick = true;
+        if(!brick.hit && (brick.y - HEX_RADIUS) > 0){
+          hasFullyVisibleBrick = true;
           break;
         }
       }
       
       // Определяем скорость движения
       let speedMultiplier = APPEARANCE_SETTINGS.normalSpeedMultiplier;
-      if(!hasVisibleBrick){
+      if(!hasFullyVisibleBrick){
         speedMultiplier = APPEARANCE_SETTINGS.fastSpeedMultiplier;
       }
       
       // Обновляем состояние
-      APPEARANCE_SETTINGS.hasVisibleBrick = hasVisibleBrick;
+      APPEARANCE_SETTINGS.hasFullyVisibleBrick = hasFullyVisibleBrick;
       
       // Обновляем каждый кирпич
       for(const brick of hexBricks){
@@ -867,7 +868,7 @@
     ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
     
     // Индикатор ускоренного появления
-    if (!APPEARANCE_SETTINGS.hasVisibleBrick) {
+    if (!APPEARANCE_SETTINGS.hasFullyVisibleBrick) {
       ctx.fillStyle = '#4cc98a';
       ctx.font = 'bold 16px system-ui, Arial';
       ctx.textAlign = 'center';
