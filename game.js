@@ -378,7 +378,7 @@
     messageTimer = performance.now();
   }
 
-  // Инициализация индикаторов бонусов - КОМПАКТНЫЙ ВАРИАНТ
+  // Инициализация индикаторов бонусов - С ПОЛОСКАМИ
   function initializePowerupIndicators() {
     powerupIndicatorsEl.innerHTML = '';
     
@@ -392,10 +392,10 @@
       background: rgba(0,0,0,0.7);
       border-radius: 6px;
       min-height: auto;
-      max-height: 45px;
+      max-height: 60px;
       align-items: center;
       justify-content: center;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       overflow: hidden;
     `;
     
@@ -408,7 +408,7 @@
       gap: 6px;
       align-items: center;
       justify-content: center;
-      flex-wrap: nowrap;
+      flex-wrap: wrap;
       overflow: hidden;
       max-width: 100%;
     `;
@@ -420,7 +420,7 @@
     hint.style.cssText = `
       color: rgba(255,255,255,0.6);
       font-family: Arial, sans-serif;
-      font-size: 12px;
+      font-size: 14px;
       text-align: center;
       padding: 4px 8px;
       font-style: italic;
@@ -434,7 +434,7 @@
     updatePowerupIndicatorsDisplay();
   }
 
-  // Обновляем отображение индикаторов бонусов - КОМПАКТНЫЙ ВАРИАНТ
+  // Обновляем отображение индикаторов бонусов - С ПОЛОСКАМИ
   function updatePowerupIndicatorsDisplay() {
     const indicatorsContainer = document.getElementById('indicatorsContainer');
     if (!indicatorsContainer) return;
@@ -458,19 +458,15 @@
       noActiveMessage.style.cssText = `
         color: rgba(255,255,255,0.6);
         font-family: Arial, sans-serif;
-        font-size: 12px;
+        font-size: 14px;
         text-align: center;
-        padding: 4px 8px;
+        padding: 8px 12px;
         font-style: italic;
-        white-space: nowrap;
       `;
       indicatorsContainer.appendChild(noActiveMessage);
     } else {
-      // Отображаем активные бонусы (максимум 3 в ряд)
-      const maxDisplay = 3;
-      const displayPowerups = activeDurationPowerups.slice(0, maxDisplay);
-      
-      displayPowerups.forEach(powerupType => {
+      // Отображаем активные бонусы в один ряд
+      activeDurationPowerups.forEach(powerupType => {
         const effect = activeEffects.get(powerupType.id);
         if (!effect) return;
         
@@ -486,71 +482,79 @@
           display: flex;
           flex-direction: column;
           align-items: center;
-          background: linear-gradient(135deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.05));
+          background: rgba(0,0,0,0.5);
           color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
+          padding: 6px 10px;
+          border-radius: 6px;
           border: 1px solid ${powerupType.indicatorColor};
           font-family: Arial, sans-serif;
-          font-size: 11px;
+          font-size: 12px;
           text-align: center;
-          min-width: 60px;
-          max-width: 80px;
-          height: 45px;
+          min-width: 70px;
+          max-width: 90px;
+          height: 50px;
           box-sizing: border-box;
           position: relative;
           overflow: hidden;
         `;
         
-        // Иконка и название
+        // Верхняя часть с иконкой и названием
         const topRow = document.createElement('div');
         topRow.style.cssText = `
           display: flex;
           align-items: center;
-          gap: 4px;
-          margin-bottom: 2px;
+          gap: 6px;
+          margin-bottom: 4px;
+          width: 100%;
         `;
         
         const iconSpan = document.createElement('span');
         iconSpan.textContent = powerupType.icon;
-        iconSpan.style.fontSize = '14px';
+        iconSpan.style.fontSize = '16px';
         
         const nameSpan = document.createElement('span');
         nameSpan.textContent = powerupType.name;
         nameSpan.style.fontSize = '10px';
+        nameSpan.style.fontWeight = 'bold';
         nameSpan.style.whiteSpace = 'nowrap';
         nameSpan.style.overflow = 'hidden';
         nameSpan.style.textOverflow = 'ellipsis';
-        nameSpan.style.maxWidth = '50px';
+        nameSpan.style.maxWidth = '60px';
         
         topRow.appendChild(iconSpan);
         topRow.appendChild(nameSpan);
+        
+        // Полоса прогресса с временем
+        const progressContainer = document.createElement('div');
+        progressContainer.style.cssText = `
+          width: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 2px;
+        `;
         
         // Время
         const timeDiv = document.createElement('div');
         timeDiv.textContent = `${timeSeconds}с`;
         timeDiv.style.cssText = `
-          font-size: 11px;
+          font-size: 10px;
           font-weight: bold;
-          margin: 2px 0;
-          background: rgba(0,0,0,0.3);
-          padding: 1px 6px;
-          border-radius: 10px;
+          color: ${powerupType.indicatorColor};
+          margin-bottom: 2px;
         `;
         
-        // Прогресс-бар
+        // Полоса прогресса
         const progressBar = document.createElement('div');
         progressBar.style.cssText = `
           width: 100%;
-          height: 3px;
+          height: 4px;
           background: rgba(255,255,255,0.1);
-          border-radius: 1px;
+          border-radius: 2px;
           overflow: hidden;
-          margin-top: 2px;
         `;
         
         const progressFill = document.createElement('div');
-        progressFill.id = `progress-${powerupType.id}`;
         progressFill.style.cssText = `
           width: ${progress}%;
           height: 100%;
@@ -560,29 +564,14 @@
         
         progressBar.appendChild(progressFill);
         
+        progressContainer.appendChild(timeDiv);
+        progressContainer.appendChild(progressBar);
+        
         indicator.appendChild(topRow);
-        indicator.appendChild(timeDiv);
-        indicator.appendChild(progressBar);
+        indicator.appendChild(progressContainer);
         
         indicatorsContainer.appendChild(indicator);
       });
-      
-      // Если бонусов больше 3, показываем счетчик
-      if (activeDurationPowerups.length > maxDisplay) {
-        const counter = document.createElement('div');
-        counter.textContent = `+${activeDurationPowerups.length - maxDisplay}`;
-        counter.style.cssText = `
-          background: rgba(255,255,255,0.2);
-          color: white;
-          padding: 4px 8px;
-          border-radius: 4px;
-          font-size: 11px;
-          font-weight: bold;
-          min-width: 30px;
-          text-align: center;
-        `;
-        indicatorsContainer.appendChild(counter);
-      }
     }
   }
 
@@ -600,7 +589,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: false,
+      pierce: activeEffects.has('pierce'), // Учитываем активный бонус пробивания
       trail: []
     };
     balls.push(ball);
@@ -829,48 +818,47 @@
     }
   }
 
-  // Обновление активных бонусов - ИСПРАВЛЕНА ОШИБКА ОКОНЧАНИЯ ДЕЙСТВИЯ БОНУСОВ
+  // Обновление активных бонусов - ИСПРАВЛЕНО ПРЕКРАЩЕНИЕ ДЕЙСТВИЯ
   function updateActivePowerups(now){
-    // Обновляем состояние нижней стенки
-    bottomWallEffect.active = activeEffects.has('bottomwall');
-    
     let needUpdate = false;
     
-    // Создаем копию ключей для безопасного удаления
-    const effectIds = Array.from(activeEffects.keys());
+    // Создаем список бонусов для удаления
+    const toRemove = [];
     
     // Проверяем каждый активный эффект
-    for(const id of effectIds){
-      const effect = activeEffects.get(id);
-      if(!effect) continue;
-      
+    for(const [id, effect] of activeEffects.entries()){
       const powerupType = POWERUP_TYPES[id];
       if(powerupType && powerupType.duration){
         if(now - effect.startTime > powerupType.duration){
-          // Удаляем эффект
-          activeEffects.delete(id);
-          needUpdate = true;
-          
-          // Отменяем эффекты конкретного бонуса
-          switch(id){
-            case 'pierce':
-              // Снимаем эффект пробивания со всех шаров
-              balls.forEach(ball => ball.pierce = false);
-              showMessage(`${powerupType.name} закончился`, powerupType.color);
-              break;
-              
-            case 'bottomwall':
-              bottomWallEffect.active = false;
-              bottomWallEffect.glowAlpha = 0;
-              showMessage(`${powerupType.name} закончился`, powerupType.color);
-              break;
-              
-            case 'freeze':
-              // Заморозка автоматически прекращается при удалении из activeEffects
-              showMessage(`${powerupType.name} закончилась`, powerupType.color);
-              break;
-          }
+          toRemove.push(id);
         }
+      }
+    }
+    
+    // Удаляем истекшие бонусы и отменяем их эффекты
+    for(const id of toRemove){
+      const powerupType = POWERUP_TYPES[id];
+      activeEffects.delete(id);
+      needUpdate = true;
+      
+      // Отменяем эффекты конкретного бонуса
+      switch(id){
+        case 'pierce':
+          // Снимаем эффект пробивания со всех шаров
+          balls.forEach(ball => ball.pierce = false);
+          showMessage(`${powerupType.name} закончился`, powerupType.color);
+          break;
+          
+        case 'bottomwall':
+          bottomWallEffect.active = false;
+          bottomWallEffect.glowAlpha = 0;
+          showMessage(`${powerupType.name} закончился`, powerupType.color);
+          break;
+          
+        case 'freeze':
+          // Заморозка автоматически прекращается при удалении из activeEffects
+          showMessage(`${powerupType.name} закончилась`, powerupType.color);
+          break;
       }
     }
     
@@ -965,6 +953,7 @@
     ball.y = canvas.height * 0.7;
     ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
     ball.dy = -4;
+    ball.pierce = activeEffects.has('pierce'); // Восстанавливаем флаг пробивания
     ballTrails.set(ball.id, []);
   }
 
