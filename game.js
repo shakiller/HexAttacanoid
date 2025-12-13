@@ -15,6 +15,191 @@
   // Скрываем дублирующий статус внизу
   statusEl.style.display = 'none';
 
+  // Создаем модальное окно для окончания игры
+  const gameOverModal = document.createElement('div');
+  gameOverModal.id = 'gameOverModal';
+  gameOverModal.style.cssText = `
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.85);
+    display: none;
+    justify-content: center;
+    align-items: center;
+    z-index: 1000;
+    font-family: 'Arial', sans-serif;
+    backdrop-filter: blur(5px);
+    animation: fadeIn 0.3s ease;
+  `;
+
+  gameOverModal.innerHTML = `
+    <div class="modal-content" style="
+      background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%);
+      padding: 40px;
+      border-radius: 20px;
+      text-align: center;
+      max-width: 500px;
+      width: 90%;
+      box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      position: relative;
+      overflow: hidden;
+      animation: slideIn 0.4s ease-out;
+    ">
+      <div style="
+        position: absolute;
+        top: 0;
+        left: 0;
+        right: 0;
+        height: 5px;
+        background: linear-gradient(90deg, #ff4757, #ff6b81, #ffa502, #ffd32a);
+      "></div>
+      
+      <div style="margin-bottom: 30px;">
+        <div style="
+          font-size: 48px;
+          font-weight: bold;
+          color: #ff4757;
+          margin-bottom: 10px;
+          text-shadow: 0 0 20px rgba(255, 71, 87, 0.5);
+          letter-spacing: 2px;
+        ">GAME OVER</div>
+        <div style="
+          font-size: 18px;
+          color: #a4b0be;
+          margin-bottom: 30px;
+        ">Время вернуться в игру!</div>
+      </div>
+      
+      <div class="stats" style="
+        background: rgba(255, 255, 255, 0.05);
+        border-radius: 15px;
+        padding: 25px;
+        margin: 25px 0;
+        border: 1px solid rgba(255, 255, 255, 0.1);
+      ">
+        <div class="stat-item" style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+          padding-bottom: 15px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        ">
+          <span style="color: #a4b0be; font-size: 18px;">🎯 Ваш счет</span>
+          <span style="color: #ffd32a; font-size: 32px; font-weight: bold;">0</span>
+        </div>
+        
+        <div class="stat-item" style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 15px;
+          padding-bottom: 15px;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+        ">
+          <span style="color: #a4b0be; font-size: 18px;">⏱️ Время выживания</span>
+          <span style="color: #00d2d3; font-size: 24px; font-weight: bold;">0:00</span>
+        </div>
+        
+        <div class="stat-item" style="
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+        ">
+          <span style="color: #a4b0be; font-size: 18px;">🏆 Уровень сложности</span>
+          <span style="color: #ff6b81; font-size: 20px; font-weight: bold;">Новичок</span>
+        </div>
+      </div>
+      
+      <div class="buttons" style="
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        margin-top: 30px;
+      ">
+        <button id="modalRestartBtn" style="
+          background: linear-gradient(135deg, #ff4757 0%, #ff6b81 100%);
+          color: white;
+          border: none;
+          padding: 16px 40px;
+          font-size: 18px;
+          border-radius: 12px;
+          cursor: pointer;
+          font-weight: bold;
+          transition: all 0.3s ease;
+          min-width: 180px;
+          letter-spacing: 1px;
+          box-shadow: 0 5px 15px rgba(255, 71, 87, 0.3);
+        ">
+          🔄 Играть снова
+        </button>
+        
+        <button id="modalCloseBtn" style="
+          background: rgba(255, 255, 255, 0.1);
+          color: white;
+          border: 1px solid rgba(255, 255, 255, 0.2);
+          padding: 16px 40px;
+          font-size: 18px;
+          border-radius: 12px;
+          cursor: pointer;
+          font-weight: bold;
+          transition: all 0.3s ease;
+          min-width: 180px;
+          letter-spacing: 1px;
+        ">
+          ✕ Закрыть
+        </button>
+      </div>
+      
+      <div style="
+        margin-top: 30px;
+        color: #747d8c;
+        font-size: 14px;
+        font-style: italic;
+      ">
+        Собери больше очков в следующей попытке!
+      </div>
+    </div>
+    
+    <style>
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slideIn {
+        from {
+          opacity: 0;
+          transform: translateY(-50px) scale(0.9);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      #modalRestartBtn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 8px 20px rgba(255, 71, 87, 0.4);
+      }
+      
+      #modalCloseBtn:hover {
+        background: rgba(255, 255, 255, 0.2);
+        transform: translateY(-3px);
+      }
+      
+      .modal-content {
+        animation: slideIn 0.4s ease-out;
+      }
+    </style>
+  `;
+
+  // Добавляем модальное окно в body
+  document.body.appendChild(gameOverModal);
+
   // Game state
   const HEX_RADIUS = 24;
   let hexBricks = [];
@@ -981,19 +1166,67 @@
     ballTrails.set(ball.id, []);
   }
 
-  // Game Over
+  // Game Over с красивым попапом
   function gameOver(){
     running = false;
     const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
     
-    drawGameOverScreen();
+    // Определяем уровень сложности на основе финальной скорости
+    let difficultyLevel = 'Новичок';
+    if (currentBrickSpeed > 0.15) difficultyLevel = 'Эксперт';
+    else if (currentBrickSpeed > 0.10) difficultyLevel = 'Продвинутый';
+    else if (currentBrickSpeed > 0.08) difficultyLevel = 'Средний';
     
-    setTimeout(() => {
-      alert(`Игра окончена!\nВаш счет: ${score}\nВремя выживания: ${minutes}:${seconds.toString().padStart(2, '0')}\nНажмите Restart чтобы играть снова.`);
-    }, 100);
+    // Обновляем данные в модальном окне
+    const modalScore = gameOverModal.querySelector('.stat-item:nth-child(1) span:last-child');
+    const modalTime = gameOverModal.querySelector('.stat-item:nth-child(2) span:last-child');
+    const modalDifficulty = gameOverModal.querySelector('.stat-item:nth-child(3) span:last-child');
+    
+    if (modalScore) modalScore.textContent = score;
+    if (modalTime) modalTime.textContent = `${minutes}:${seconds.toString().padStart(2, '0')}`;
+    if (modalDifficulty) modalDifficulty.textContent = difficultyLevel;
+    
+    // Показываем модальное окно с анимацией
+    gameOverModal.style.display = 'flex';
+    
+    // Останавливаем игровой цикл
+    running = false;
   }
+
+  // Обработчики кнопок модального окна
+  document.addEventListener('DOMContentLoaded', () => {
+    // Кнопка "Играть снова"
+    const modalRestartBtn = document.getElementById('modalRestartBtn');
+    if (modalRestartBtn) {
+      modalRestartBtn.addEventListener('click', () => {
+        gameOverModal.style.display = 'none';
+        if(modeSelect.value === 'infinite'){
+          startInfiniteMode();
+        } else {
+          loadLevel(levelSelect.value || levelConfigs[0].value);
+        }
+        running = true;
+        requestAnimationFrame(loop);
+      });
+    }
+    
+    // Кнопка "Закрыть"
+    const modalCloseBtn = document.getElementById('modalCloseBtn');
+    if (modalCloseBtn) {
+      modalCloseBtn.addEventListener('click', () => {
+        gameOverModal.style.display = 'none';
+      });
+    }
+    
+    // Закрытие по клику вне модального окна
+    gameOverModal.addEventListener('click', (e) => {
+      if (e.target === gameOverModal) {
+        gameOverModal.style.display = 'none';
+      }
+    });
+  });
 
   // Draw scene
   function draw(now){
@@ -1152,20 +1385,6 @@
       ctx.fillText('Нажмите Pause для продолжения', canvas.width/2, canvas.height/2 + 40);
       ctx.textAlign = 'left';
     }
-  }
-
-  function drawGameOverScreen() {
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 42px system-ui, Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 40);
-    ctx.fillStyle = '#fff';
-    ctx.font = '24px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 + 20);
-    ctx.fillText(`Нажмите Restart`, canvas.width/2, canvas.height/2 + 60);
-    ctx.textAlign = 'left';
   }
 
   // Physics and collisions
