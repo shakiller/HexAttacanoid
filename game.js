@@ -27,18 +27,18 @@
   let lives = 3;
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let baseBrickSpeed = 0.04;
-  let currentBrickSpeed = 0.04;
+  let baseBrickSpeed = 0.08; // Увеличена базовая скорость
+  let currentBrickSpeed = 0.08;
   let spawnTimer = 0;
   const SPAWN_INTERVAL = 1800;
   let gameStartTime = 0;
   let lastSpeedIncreaseTime = 0;
-  const SPEED_INCREASE_INTERVAL = 60000;
-  const SPEED_INCREASE_AMOUNT = 0.01;
+  const SPEED_INCREASE_INTERVAL = 30000; // 30 секунд
+  const SPEED_INCREASE_AMOUNT = 0.02; // Увеличение скорости
   
   // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
-    fastSpeedMultiplier: 25,
+    fastSpeedMultiplier: 25, // Увеличено до 25
     normalSpeedMultiplier: 1,
     hasFullyVisibleBrick: false
   };
@@ -63,15 +63,15 @@
     minSpacing: HEX_RADIUS * 2.8
   };
 
-  // Типы бонусов
+  // Типы бонусов - обновлены настройки
   const POWERUP_TYPES = {
     MULTIBALL: { 
       id: 'multiball', 
       name: 'Мультишар', 
-      duration: 10000,
       color: '#ff6b6b',
       icon: '⚽',
-      indicatorColor: '#ff4444'
+      indicatorColor: '#ff4444',
+      isInstant: true // Разовый бонус
     },
     FREEZE: { 
       id: 'freeze', 
@@ -79,7 +79,8 @@
       duration: 8000,
       color: '#4d96ff',
       icon: '❄️',
-      indicatorColor: '#4d96ff'
+      indicatorColor: '#4d96ff',
+      isInstant: false
     },
     PIERCE: { 
       id: 'pierce', 
@@ -87,15 +88,16 @@
       duration: 12000,
       color: '#9b59b6',
       icon: '💥',
-      indicatorColor: '#9b59b6'
+      indicatorColor: '#9b59b6',
+      isInstant: false
     },
     TRIPLE: { 
       id: 'triple', 
       name: 'Тройной', 
-      duration: 7000,
       color: '#f39c12',
       icon: '🔶',
-      indicatorColor: '#f39c12'
+      indicatorColor: '#f39c12',
+      isInstant: true // Разовый бонус
     },
     BOTTOMWALL: { 
       id: 'bottomwall', 
@@ -103,7 +105,8 @@
       duration: 15000,
       color: '#1abc9c',
       icon: '⬇️',
-      indicatorColor: '#1abc9c'
+      indicatorColor: '#1abc9c',
+      isInstant: false
     }
   };
 
@@ -118,7 +121,13 @@
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
 
-  // Speed slider
+  // Speed slider - обновлен диапазон
+  speedSlider.min = 0.02;
+  speedSlider.max = 0.2;
+  speedSlider.step = 0.01;
+  speedSlider.value = baseBrickSpeed;
+  speedValue.textContent = baseBrickSpeed.toFixed(2);
+  
   speedSlider.addEventListener('input', (e) => {
     baseBrickSpeed = parseFloat(e.target.value);
     currentBrickSpeed = baseBrickSpeed;
@@ -510,10 +519,14 @@
     });
   }
 
-  // Обновление бонусов
+  // Обновление бонусов - заморозка не действует на падающие бонусы
   function updatePowerups(){
+    const freezeActive = activeEffects.has('freeze');
+    
     for(let i = powerups.length - 1; i >= 0; i--){
       const powerup = powerups[i];
+      
+      // Заморозка НЕ действует на падающие бонусы
       powerup.y += powerup.dy;
       
       // Столкновение с платформой
@@ -534,17 +547,20 @@
     }
   }
 
-  // Активация бонуса
+  // Активация бонуса - обновленная логика
   function activatePowerup(type){
     const now = performance.now();
     
-    // Если эффект уже активен, сбрасываем таймер
-    if(activeEffects.has(type.id)){
-      activeEffects.set(type.id, { startTime: now, duration: type.duration });
-    } else {
-      activeEffects.set(type.id, { startTime: now, duration: type.duration });
-      
-      // Применяем немедленный эффект
+    // Если эффект уже активен и это не разовый бонус, продлеваем время
+    if(activeEffects.has(type.id) && !type.isInstant) {
+      const effect = activeEffects.get(type.id);
+      effect.startTime = now;
+      showMessage(`Бонус продлен: ${type.name}`, type.color);
+      return;
+    }
+    
+    // Для разовых бонусов (мультишар, тройной) всегда применяем эффект
+    if(type.isInstant) {
       switch(type.id){
         case 'multiball':
           const newBall = createBall();
@@ -552,7 +568,7 @@
           newBall.y = paddle.y - newBall.radius;
           newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
           newBall.dy = -4;
-          showMessage(`Активирован: ${type.name}`, type.color);
+          showMessage(`Добавлен шар: ${type.name}`, type.color);
           break;
           
         case 'triple':
@@ -564,23 +580,29 @@
             tripleBall.dx = 4 * Math.cos(angle);
             tripleBall.dy = -Math.abs(4 * Math.sin(angle));
           }
-          showMessage(`Активирован: ${type.name}`, type.color);
-          break;
-          
-        case 'freeze':
-          showMessage(`Активирован: ${type.name}`, type.color);
-          break;
-          
-        case 'pierce':
-          balls.forEach(ball => ball.pierce = true);
-          showMessage(`Активирован: ${type.name}`, type.color);
-          break;
-          
-        case 'bottomwall':
-          bottomWallEffect.active = true;
-          showMessage(`Активирован: ${type.name}`, type.color);
+          showMessage(`Добавлены шары: ${type.name}`, type.color);
           break;
       }
+      return;
+    }
+    
+    // Для бонусов с длительностью
+    activeEffects.set(type.id, { startTime: now, duration: type.duration });
+    
+    switch(type.id){
+      case 'freeze':
+        showMessage(`Активирован: ${type.name}`, type.color);
+        break;
+        
+      case 'pierce':
+        balls.forEach(ball => ball.pierce = true);
+        showMessage(`Активирован: ${type.name}`, type.color);
+        break;
+        
+      case 'bottomwall':
+        bottomWallEffect.active = true;
+        showMessage(`Активирован: ${type.name}`, type.color);
+        break;
     }
   }
 
@@ -607,21 +629,25 @@
     }
   }
 
-  // Обновление кирпичей - ИСПРАВЛЕНО
+  // Обновление кирпичей - обновленная логика для заморозки
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
-    if(!freezeActive){
-      // Проверяем, есть ли на поле полностью видимый кирпич
-      // Кирпич считается полностью видимым, когда его ВЕРХНЯЯ часть (y - HEX_RADIUS) > 0
-      let hasFullyVisibleBrick = false;
-      for(const brick of hexBricks){
-        if(!brick.hit && (brick.y - HEX_RADIUS) > 0){
-          hasFullyVisibleBrick = true;
-          break;
-        }
+    // Проверяем, есть ли на поле полностью видимый кирпич
+    // Кирпич считается полностью видимым, когда его ВЕРХНЯЯ часть (y - HEX_RADIUS) > 0
+    let hasFullyVisibleBrick = false;
+    for(const brick of hexBricks){
+      if(!brick.hit && (brick.y - HEX_RADIUS) > 0){
+        hasFullyVisibleBrick = true;
+        break;
       }
-      
+    }
+    
+    // Определяем, нужно ли применять заморозку
+    // Заморозка действует только если есть видимые кирпичи
+    const shouldFreeze = freezeActive && hasFullyVisibleBrick;
+    
+    if(!shouldFreeze){
       // Определяем скорость движения
       let speedMultiplier = APPEARANCE_SETTINGS.normalSpeedMultiplier;
       if(!hasFullyVisibleBrick){
@@ -644,20 +670,21 @@
           brick.removeStart = now;
         }
       }
-      
-      // Удаляем уничтоженные кирпичи
-      for(let i = hexBricks.length - 1; i >= 0; i--){
-        const brick = hexBricks[i];
-        if(brick.hit && brick.removing){
-          const tt = now - brick.removeStart;
-          if(tt > 360){
-            // При уничтожении кирпича с бонусом создаем падающий бонус
-            if(brick.containsPowerup){
-              spawnPowerup(brick.x, brick.y, brick.powerupType);
-            }
-            score += 100;
-            hexBricks.splice(i, 1);
+    }
+    
+    // Удаляем уничтоженные кирпичи (работает даже при заморозке)
+    for(let i = hexBricks.length - 1; i >= 0; i--){
+      const brick = hexBricks[i];
+      if(brick.hit && brick.removing){
+        const tt = now - brick.removeStart;
+        if(tt > 360){
+          // При уничтожении кирпича с бонусом создаем падающий бонус
+          // Бонусы выпадают даже при заморозке
+          if(brick.containsPowerup){
+            spawnPowerup(brick.x, brick.y, brick.powerupType);
           }
+          score += 100;
+          hexBricks.splice(i, 1);
         }
       }
     }
@@ -750,8 +777,50 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Индикаторы бонусов вверху экрана
-    drawPowerupIndicators(now);
+    // Индикаторы бонусов вверху экрана (только для бонусов с длительностью)
+    const durationPowerups = Array.from(activeEffects.entries())
+      .filter(([id]) => !POWERUP_TYPES[id]?.isInstant);
+    if (durationPowerups.length > 0) {
+      const indicatorHeight = 8;
+      const spacing = 2;
+      const startY = 5;
+      let currentY = startY;
+      
+      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
+      ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * durationPowerups.length + 5);
+      
+      for (const [powerupId, effect] of durationPowerups) {
+        const powerupType = POWERUP_TYPES[powerupId];
+        if (!powerupType) continue;
+        
+        const elapsed = now - effect.startTime;
+        const remaining = Math.max(0, effect.duration - elapsed);
+        const progress = remaining / effect.duration;
+        
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
+        ctx.fillRect(10, currentY, canvas.width - 20, indicatorHeight);
+        
+        const barWidth = (canvas.width - 20) * progress;
+        ctx.fillStyle = powerupType.indicatorColor;
+        ctx.fillRect(10, currentY, barWidth, indicatorHeight);
+        
+        ctx.fillStyle = '#fff';
+        ctx.font = '12px Arial';
+        ctx.textAlign = 'left';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(powerupType.icon, 12, currentY + indicatorHeight / 2);
+        
+        const timeLeft = (remaining / 1000).toFixed(1);
+        ctx.textAlign = 'right';
+        ctx.fillText(`${powerupType.name} (${timeLeft}с)`, canvas.width - 12, currentY + indicatorHeight / 2);
+        
+        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
+        ctx.lineWidth = 1;
+        ctx.strokeRect(10, currentY, canvas.width - 20, indicatorHeight);
+        
+        currentY += indicatorHeight + spacing;
+      }
+    }
 
     // bricks
     for (const b of hexBricks){
