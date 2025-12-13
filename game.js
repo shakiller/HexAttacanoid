@@ -613,7 +613,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: false, // НЕ будет автоматически пробивающим, даже если бонус активен
+      pierce: false,
       trail: []
     };
     balls.push(ball);
@@ -776,7 +776,7 @@
       const effect = activeEffects.get(type.id);
       effect.startTime = now;
       showMessage(`Бонус продлен: ${type.name}`, type.color);
-      updatePowerupIndicatorsDisplay(); // Обновляем индикаторы
+      updatePowerupIndicatorsDisplay();
       return;
     }
     
@@ -839,61 +839,55 @@
           break;
       }
       
-      // Обновляем индикаторы сразу после активации
       updatePowerupIndicatorsDisplay();
     }
   }
 
-  // Обновление активных бонусов - ИСПРАВЛЕННАЯ ВЕРСИЯ
+  // Обновление активных бонусов - КОРЕННО ИСПРАВЛЕНА для гарантированного завершения
   function updateActivePowerups(now){
-    // Создаем массив для бонусов, которые нужно удалить
-    const effectsToRemove = [];
+    // Создаем копию ключей, чтобы безопасно удалять
+    const keys = Array.from(activeEffects.keys());
+    let needUpdate = false;
     
-    // Проверяем каждый активный эффект
-    for(const [id, effect] of activeEffects.entries()){
-      const powerupType = POWERUP_TYPES[id];
+    for(const id of keys){
+      const effect = activeEffects.get(id);
+      if(!effect) continue;
+      
+      const powerupType = effect.type;
       if(!powerupType || !powerupType.duration) continue;
       
       const elapsed = now - effect.startTime;
       
-      // Если время эффекта истекло
+      // Если время истекло
       if(elapsed >= powerupType.duration){
-        effectsToRemove.push({id: id, powerupType: powerupType});
+        // Удаляем эффект
+        activeEffects.delete(id);
+        needUpdate = true;
+        
+        // Отменяем эффекты конкретного бонуса
+        switch(id){
+          case 'pierce':
+            // Снимаем эффект пробивания со всех шаров
+            balls.forEach(ball => {
+              ball.pierce = false;
+            });
+            showMessage(`${powerupType.name} закончился`, powerupType.color);
+            break;
+            
+          case 'bottomwall':
+            bottomWallEffect.active = false;
+            showMessage(`${powerupType.name} закончилась`, powerupType.color);
+            break;
+            
+          case 'freeze':
+            showMessage(`${powerupType.name} закончилась`, powerupType.color);
+            break;
+        }
       }
     }
     
-    // Удаляем истекшие эффекты
-    for(const item of effectsToRemove){
-      const id = item.id;
-      const powerupType = item.powerupType;
-      
-      // Отменяем эффекты конкретного бонуса
-      switch(id){
-        case 'pierce':
-          // Снимаем эффект пробивания со всех шаров
-          balls.forEach(ball => {
-            ball.pierce = false;
-          });
-          showMessage(`${powerupType.name} закончился`, powerupType.color);
-          break;
-          
-        case 'bottomwall':
-          bottomWallEffect.active = false;
-          bottomWallEffect.glowAlpha = 0;
-          showMessage(`${powerupType.name} закончилась`, powerupType.color);
-          break;
-          
-        case 'freeze':
-          showMessage(`${powerupType.name} закончилась`, powerupType.color);
-          break;
-      }
-      
-      // Удаляем эффект из активных
-      activeEffects.delete(id);
-    }
-    
-    // Обновляем индикаторы, если что-то изменилось
-    if(effectsToRemove.length > 0){
+    // Если что-то изменилось, обновляем индикаторы
+    if(needUpdate){
       updatePowerupIndicatorsDisplay();
     }
   }
@@ -983,7 +977,7 @@
     ball.y = canvas.height * 0.7;
     ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
     ball.dy = -4;
-    ball.pierce = false; // Всегда сбрасываем пробивание
+    ball.pierce = false;
     ballTrails.set(ball.id, []);
   }
 
@@ -999,20 +993,6 @@
     setTimeout(() => {
       alert(`Игра окончена!\nВаш счет: ${score}\nВремя выживания: ${minutes}:${seconds.toString().padStart(2, '0')}\nНажмите Restart чтобы играть снова.`);
     }, 100);
-  }
-
-  function drawGameOverScreen() {
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 42px system-ui, Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 40);
-    ctx.fillStyle = '#fff';
-    ctx.font = '24px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 + 20);
-    ctx.fillText(`Нажмите Restart`, canvas.width/2, canvas.height/2 + 60);
-    ctx.textAlign = 'left';
   }
 
   // Draw scene
@@ -1038,10 +1018,8 @@
           drawHex(b.x, b.y, HEX_RADIUS, b.color, Math.max(0, 1.15 * (1 - p)), Math.max(0, 1 - p));
         }
       } else if (!b.hit) {
-        // Обычное отображение
         drawHex(b.x, b.y, HEX_RADIUS, b.color);
         
-        // Рисуем иконку бонуса в кирпиче
         if(b.containsPowerup){
           ctx.save();
           ctx.fillStyle = '#fff';
@@ -1176,7 +1154,21 @@
     }
   }
 
-  // Physics and collisions - ИСПРАВЛЕНА для предотвращения разгона шаров
+  function drawGameOverScreen() {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 42px system-ui, Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 40);
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px system-ui, Arial';
+    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 + 20);
+    ctx.fillText(`Нажмите Restart`, canvas.width/2, canvas.height/2 + 60);
+    ctx.textAlign = 'left';
+  }
+
+  // Physics and collisions
   function reflect(vx,vy,nx,ny){
     const dot = vx*nx + vy*ny;
     let rx = vx - 2*dot*nx;
@@ -1190,7 +1182,7 @@
     
     // Ограничиваем максимальную скорость
     const currentSpeed = Math.sqrt(rx*rx + ry*ry);
-    const maxSpeed = 6; // Максимальная скорость шара
+    const maxSpeed = 6;
     if (currentSpeed > maxSpeed) {
       const scale = maxSpeed / currentSpeed;
       rx *= scale;
@@ -1213,15 +1205,15 @@
     // walls
     if (ball.x < ball.radius){ 
       ball.x = ball.radius; 
-      ball.dx = Math.abs(ball.dx); // Гарантируем положительное направление
+      ball.dx = Math.abs(ball.dx);
     }
     if (ball.x > canvas.width - ball.radius){ 
       ball.x = canvas.width - ball.radius; 
-      ball.dx = -Math.abs(ball.dx); // Гарантируем отрицательное направление
+      ball.dx = -Math.abs(ball.dx);
     }
     if (ball.y < ball.radius){ 
       ball.y = ball.radius; 
-      ball.dy = Math.abs(ball.dy); // Гарантируем положительное направление вниз
+      ball.dy = Math.abs(ball.dy);
     }
 
     // paddle collision
@@ -1235,7 +1227,7 @@
       const baseAngle = offset * (Math.PI/3);
       const variation = (Math.random() - 0.5) * (Math.PI/36);
       const final = baseAngle + variation;
-      const speed = Math.max(2.2, Math.min(6, Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy))); // Ограничиваем скорость
+      const speed = Math.max(2.2, Math.min(6, Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy)));
       ball.dx = speed * Math.sin(final);
       ball.dy = -Math.abs(speed * Math.cos(final));
       ball.y = paddle.y - ball.radius - 0.1;
@@ -1402,7 +1394,7 @@
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
-        updatePowerupIndicatorsDisplay(); // Обновляем индикаторы каждый кадр
+        updatePowerupIndicatorsDisplay();
       }
     }
 
