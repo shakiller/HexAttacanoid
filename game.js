@@ -63,7 +63,7 @@
     minSpacing: HEX_RADIUS * 2.8
   };
 
-  // Типы бонусов - обновлены настройки
+  // Типы бонусов
   const POWERUP_TYPES = {
     MULTIBALL: { 
       id: 'multiball', 
@@ -84,11 +84,11 @@
     },
     PIERCE: { 
       id: 'pierce', 
-      name: 'Пробивной шар', 
+      name: 'Огненный шар', 
       duration: 12000,
-      color: '#9b59b6',
+      color: '#ff9900',
       icon: '🔥',
-      indicatorColor: '#9b59b6',
+      indicatorColor: '#ff9900',
       isInstant: false
     },
     TRIPLE: { 
@@ -211,8 +211,14 @@
 
   // Обновление частиц эффекта нижней стенки
   function updateBottomWallEffect(now) {
-    if (!bottomWallEffect.active && bottomWallEffect.particles.length === 0) return;
+    // Если эффект не активен, быстрее убираем свечение
+    if (!bottomWallEffect.active) {
+      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.05);
+    } else {
+      bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
+    }
     
+    // Обновляем частицы
     for (let i = bottomWallEffect.particles.length - 1; i >= 0; i--) {
       const particle = bottomWallEffect.particles[i];
       particle.x += particle.dx;
@@ -224,14 +230,9 @@
       }
     }
     
-    if (bottomWallEffect.active) {
-      bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
-    } else {
-      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.05); // Быстрее исчезает
-      // Очищаем частицы, если эффект не активен и свечение исчезло
-      if (bottomWallEffect.glowAlpha <= 0) {
-        bottomWallEffect.particles = [];
-      }
+    // Если эффект не активен и свечение исчезло, очищаем частицы
+    if (!bottomWallEffect.active && bottomWallEffect.glowAlpha <= 0) {
+      bottomWallEffect.particles = [];
     }
   }
 
@@ -384,7 +385,7 @@
     messageTimer = performance.now();
   }
 
-  // Рисуем индикаторы бонусов вверху экрана - ВОЗВРАЩАЕМ все индикаторы
+  // Рисуем индикаторы бонусов вверху экрана
   function drawPowerupIndicators(now) {
     const powerupEntries = Array.from(activeEffects.entries());
     if (powerupEntries.length === 0) return;
@@ -462,46 +463,55 @@
     return ball;
   }
 
-  // Спавн ряда кирпичей
+  // Спавн ряда кирпичей - УЛУЧШЕННЫЙ рандом
   function spawnBrickRow(yOffset = 0){
     const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
     const minSpacing = INFINITE_SETTINGS.minSpacing;
     const newBricks = [];
     const rowId = Date.now() + Math.random();
     
-    // Создаем сетку для размещения
-    const columns = Math.floor((canvas.width - minSpacing * 2) / minSpacing);
-    const actualBricks = Math.min(bricksInRow, columns);
-    
-    // Создаем список доступных позиций в сетке
+    // Создаем массив возможных позиций по X
     const availablePositions = [];
-    for(let col = 0; col < columns; col++){
-      availablePositions.push(col);
-    }
+    const maxAttempts = 50;
+    const edgeMargin = HEX_RADIUS * 2;
     
-    // Перемешиваем позиции
-    for(let i = availablePositions.length - 1; i > 0; i--){
-      const j = Math.floor(Math.random() * (i + 1));
-      [availablePositions[i], availablePositions[j]] = [availablePositions[j], availablePositions[i]];
-    }
-    
-    // Берем нужное количество позиций
-    const selectedPositions = availablePositions.slice(0, actualBricks);
-    
-    for(const col of selectedPositions){
-      const x = minSpacing + col * minSpacing;
-      const y = yOffset; // Используем переданное смещение
+    // Генерируем случайные позиции с учетом отступов от краев
+    for (let i = 0; i < maxAttempts; i++) {
+      const x = edgeMargin + Math.random() * (canvas.width - 2 * edgeMargin);
       
-      // Проверяем, не пересекается ли с существующими кирпичами
+      // Проверяем, не слишком ли близко к другим кирпичам в ЭТОМ же ряду
       let tooClose = false;
-      for(const brick of hexBricks){
-        if(distance(x, y, brick.x, brick.y) < minSpacing * 0.8){
+      for (const brick of newBricks) {
+        if (Math.abs(brick.x - x) < minSpacing) {
           tooClose = true;
           break;
         }
       }
       
-      if(tooClose) continue;
+      // Проверяем, не слишком ли близко к существующим кирпичам
+      if (!tooClose) {
+        for (const brick of hexBricks) {
+          if (Math.abs(brick.y - yOffset) < 150 && distance(x, yOffset, brick.x, brick.y) < minSpacing * 0.8) {
+            tooClose = true;
+            break;
+          }
+        }
+      }
+      
+      if (!tooClose) {
+        availablePositions.push(x);
+        if (availablePositions.length >= bricksInRow) {
+          break;
+        }
+      }
+    }
+    
+    // Если не нашли достаточно позиций, уменьшаем количество кирпичей
+    const actualBricks = Math.min(bricksInRow, availablePositions.length);
+    
+    for(let i = 0; i < actualBricks; i++){
+      const x = availablePositions[i];
+      const y = yOffset;
       
       let containsPowerup = null;
       if(Math.random() < INFINITE_SETTINGS.powerupChance){
@@ -578,39 +588,48 @@
       return;
     }
     
-    // Для всех бонусов (включая разовые) добавляем в активные эффекты
-    // Для разовых бонусов устанавливаем очень большое время (или не устанавливаем)
+    // Для разовых бонусов всегда применяем эффект
     if(type.isInstant) {
-      // Для разовых бонусов добавляем с фиктивной длительностью (для отображения)
-      activeEffects.set(type.id, { startTime: now, duration: 5000 }); // 5 секунд для отображения
-    } else {
-      // Для бонусов с длительностью
-      activeEffects.set(type.id, { startTime: now, duration: type.duration });
+      // Добавляем в активные эффекты для отображения индикатора
+      activeEffects.set(type.id, { 
+        startTime: now, 
+        duration: 5000, // Показываем 5 секунд
+        isInstant: true 
+      });
+      
+      switch(type.id){
+        case 'multiball':
+          const newBall = createBall();
+          newBall.x = paddle.x + paddle.width / 2;
+          newBall.y = paddle.y - newBall.radius;
+          newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+          newBall.dy = -4;
+          showMessage(`Добавлен шар: ${type.name}`, type.color);
+          break;
+          
+        case 'triple':
+          for(let i=0; i<2; i++){
+            const tripleBall = createBall();
+            tripleBall.x = paddle.x + paddle.width / 2;
+            tripleBall.y = paddle.y - tripleBall.radius;
+            const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
+            tripleBall.dx = 4 * Math.cos(angle);
+            tripleBall.dy = -Math.abs(4 * Math.sin(angle));
+          }
+          showMessage(`Добавлены шары: ${type.name}`, type.color);
+          break;
+      }
+      return;
     }
     
-    // Применяем немедленный эффект
+    // Для бонусов с длительностью
+    activeEffects.set(type.id, { 
+      startTime: now, 
+      duration: type.duration,
+      isInstant: false 
+    });
+    
     switch(type.id){
-      case 'multiball':
-        const newBall = createBall();
-        newBall.x = paddle.x + paddle.width / 2;
-        newBall.y = paddle.y - newBall.radius;
-        newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
-        newBall.dy = -4;
-        showMessage(`Добавлен шар: ${type.name}`, type.color);
-        break;
-        
-      case 'triple':
-        for(let i=0; i<2; i++){
-          const tripleBall = createBall();
-          tripleBall.x = paddle.x + paddle.width / 2;
-          tripleBall.y = paddle.y - tripleBall.radius;
-          const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
-          tripleBall.dx = 4 * Math.cos(angle);
-          tripleBall.dy = -Math.abs(4 * Math.sin(angle));
-        }
-        showMessage(`Добавлены шары: ${type.name}`, type.color);
-        break;
-        
       case 'freeze':
         showMessage(`Активирован: ${type.name}`, type.color);
         break;
@@ -634,13 +653,7 @@
     
     // Удаляем истекшие эффекты
     for(const [id, effect] of activeEffects){
-      const powerupType = POWERUP_TYPES[id];
-      if (!powerupType) continue;
-      
-      // Для разовых бонусов удаляем через 5 секунд
-      const duration = powerupType.isInstant ? 5000 : effect.duration;
-      
-      if(now - effect.startTime > duration){
+      if(now - effect.startTime > effect.duration){
         activeEffects.delete(id);
         
         // Отменяем эффекты
@@ -651,7 +664,6 @@
           case 'bottomwall':
             // При отмене нижней стенки сбрасываем эффекты
             bottomWallEffect.active = false;
-            bottomWallEffect.particles = [];
             break;
         }
       }
@@ -672,7 +684,6 @@
     }
     
     // Определяем, нужно ли применять заморозку
-    // Заморозка действует только если есть видимые кирпичи
     const shouldFreeze = freezeActive && hasFullyVisibleBrick;
     
     if(!shouldFreeze){
@@ -706,7 +717,6 @@
       if(brick.hit && brick.removing){
         const tt = now - brick.removeStart;
         if(tt > 360){
-          // При уничтожении кирпича с бонусом создаем падающий бонус
           if(brick.containsPowerup){
             spawnPowerup(brick.x, brick.y, brick.powerupType);
           }
@@ -729,7 +739,6 @@
     if(lives <= 0){
       gameOver();
     } else {
-      // Оставляем только один шар после потери жизни
       if(balls.length > 0){
         balls = [balls[0]];
         ballTrails.clear();
@@ -758,7 +767,6 @@
     
     statusEl.textContent = `Игра окончена! Счет: ${score} | Время: ${minutes}:${seconds.toString().padStart(2, '0')}`;
     
-    // Создаем красивый экран окончания игры
     drawGameOverScreen();
     
     setTimeout(() => {
@@ -867,7 +875,7 @@
     // Индикатор пробивного режима
     const pierceActive = activeEffects.has('pierce');
     if(pierceActive){
-      ctx.fillStyle = 'rgba(155, 89, 182, 0.2)';
+      ctx.fillStyle = 'rgba(255, 153, 0, 0.2)';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     }
 
@@ -893,16 +901,32 @@
       // ball
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-      ctx.fillStyle = ball.pierce ? '#9b59b6' : '#ff4d4d';
+      ctx.fillStyle = ball.pierce ? '#ff9900' : '#ff4d4d'; // Огненный шар оранжевый
       ctx.fill();
       
-      // Индикатор пробивного шара
+      // Индикатор огненного шара
       if(ball.pierce){
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
         ctx.beginPath();
         ctx.arc(ball.x, ball.y, ball.radius + 3, 0, Math.PI*2);
         ctx.stroke();
+        
+        // Эффект пламени вокруг шара
+        ctx.save();
+        ctx.globalAlpha = 0.7;
+        for(let i = 0; i < 5; i++) {
+          const angle = (Date.now() / 200 + i * Math.PI * 2 / 5) % (Math.PI * 2);
+          const flameX = ball.x + Math.cos(angle) * (ball.radius + 5);
+          const flameY = ball.y + Math.sin(angle) * (ball.radius + 5);
+          const flameSize = 3 + Math.sin(Date.now() / 100 + i) * 2;
+          
+          ctx.fillStyle = '#ff9900';
+          ctx.beginPath();
+          ctx.arc(flameX, flameY, flameSize, 0, Math.PI*2);
+          ctx.fill();
+        }
+        ctx.restore();
       }
     }
 
@@ -1009,7 +1033,7 @@
       const ddx = ball.x - cx, ddy = ball.y - cy;
       if (Math.hypot(ddx, ddy) > HEX_RADIUS + ball.radius) continue;
 
-      // В пробивном режиме просто уничтожаем кирпич без отскока
+      // В огненном режиме просто уничтожаем кирпич без отскока
       if(ball.pierce){
         b.hit = true;
         b.removing = true;
@@ -1063,7 +1087,6 @@
         // Эффект отскока
         showMessage('Отскок!', '#1abc9c');
       } else {
-        // Иначе теряем шар или жизнь
         if(balls.length > 1){
           const index = balls.indexOf(ball);
           if(index > -1){
