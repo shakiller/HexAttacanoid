@@ -10,6 +10,7 @@
   const levelCompletion = document.getElementById('levelCompletion');
   const titleEl = document.getElementById('title');
   const gameInfoEl = document.getElementById('gameInfo');
+  const powerupIndicatorsEl = document.getElementById('powerupIndicators');
 
   // Game state
   const HEX_RADIUS = 24;
@@ -321,12 +322,16 @@
       glowAlpha: 0
     };
     
+    // Очищаем индикаторы бонусов
+    powerupIndicatorsEl.innerHTML = '';
+    
     createBall();
     
     // Создаем первый ряд за пределами поля (выше экрана)
     spawnBrickRow(-HEX_RADIUS * 3);
     
     updateStatus();
+    updatePowerupIndicators(performance.now());
   }
 
   // Обновление статуса и игровой информации
@@ -371,8 +376,8 @@
     messageTimer = performance.now();
   }
 
-  // Рисуем полоски времени только для бонусов с длительностью
-  function drawPowerupIndicators(now) {
+  // Обновляем HTML индикаторы бонусов
+  function updatePowerupIndicators(now) {
     const powerupEntries = Array.from(activeEffects.entries());
     
     // Фильтруем только бонусы с длительностью (не разовые)
@@ -380,60 +385,56 @@
       POWERUP_TYPES[id] && POWERUP_TYPES[id].duration && !POWERUP_TYPES[id].isInstant
     );
     
-    if (durationPowerups.length === 0) return;
+    // Если нет бонусов, скрываем контейнер
+    if (durationPowerups.length === 0) {
+      powerupIndicatorsEl.style.display = 'none';
+      return;
+    }
     
-    const indicatorHeight = 25;
-    const spacing = 4;
-    const startY = 10;
-    const padding = 10;
-    let currentY = startY;
+    // Показываем контейнер
+    powerupIndicatorsEl.style.display = 'flex';
     
-    // Фон для всех индикаторов
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * durationPowerups.length + 10);
+    // Очищаем предыдущие индикаторы
+    powerupIndicatorsEl.innerHTML = '';
     
+    // Создаем индикаторы для каждого активного бонуса
     for (const [powerupId, effect] of durationPowerups) {
       const powerupType = POWERUP_TYPES[powerupId];
       if (!powerupType) continue;
       
       const elapsed = now - effect.startTime;
       const remaining = Math.max(0, powerupType.duration - elapsed);
-      const progress = remaining / powerupType.duration;
+      const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
       const timeText = `${(remaining / 1000).toFixed(1)}с`;
       
-      // Фон полоски
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-      ctx.fillRect(padding, currentY, canvas.width - padding * 2, indicatorHeight);
+      // Создаем элемент индикатора
+      const indicator = document.createElement('div');
+      indicator.className = 'powerup-indicator';
+      indicator.style.cssText = `
+        background: linear-gradient(to right, ${powerupType.indicatorColor} ${progress}%, rgba(255,255,255,0.1) ${progress}%);
+        border: 1px solid rgba(255,255,255,0.3);
+        border-radius: 3px;
+        padding: 8px 12px;
+        margin: 3px 0;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        color: white;
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        min-width: 200px;
+      `;
       
-      // Заполненная часть (прогресс)
-      const barWidth = (canvas.width - padding * 2) * progress;
-      const gradient = ctx.createLinearGradient(padding, 0, padding + barWidth, 0);
-      gradient.addColorStop(0, powerupType.indicatorColor);
-      gradient.addColorStop(1, lighten(powerupType.indicatorColor, 0.3));
-      ctx.fillStyle = gradient;
-      ctx.fillRect(padding, currentY, barWidth, indicatorHeight);
+      // Содержимое индикатора
+      indicator.innerHTML = `
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 16px;">${powerupType.icon}</span>
+          <span>${powerupType.name}</span>
+        </div>
+        <div style="font-weight: bold;">${timeText}</div>
+      `;
       
-      // Иконка бонуса
-      ctx.fillStyle = '#fff';
-      ctx.font = '16px Arial';
-      ctx.textAlign = 'left';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(powerupType.icon, padding + 8, currentY + indicatorHeight / 2);
-      
-      // Название бонуса
-      ctx.fillText(powerupType.name, padding + 40, currentY + indicatorHeight / 2);
-      
-      // Время
-      ctx.textAlign = 'right';
-      ctx.fillText(timeText, canvas.width - padding - 8, currentY + indicatorHeight / 2);
-      ctx.textAlign = 'left';
-      
-      // Обводка
-      ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-      ctx.lineWidth = 1;
-      ctx.strokeRect(padding, currentY, canvas.width - padding * 2, indicatorHeight);
-      
-      currentY += indicatorHeight + spacing;
+      powerupIndicatorsEl.appendChild(indicator);
     }
   }
 
@@ -807,9 +808,6 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Полоски времени бонусов вверху экрана (только с длительностью)
-    drawPowerupIndicators(now);
-
     // bricks
     for (const b of hexBricks){
       if (b.hit && b.removing){
@@ -1154,6 +1152,7 @@
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
+        updatePowerupIndicators(now);
       }
     }
 
