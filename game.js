@@ -27,18 +27,18 @@
   let lives = 3;
   let levelComplete = false;
   let fileAccessWarningShown = false;
-  let baseBrickSpeed = 0.08; // Увеличена базовая скорость
+  let baseBrickSpeed = 0.08;
   let currentBrickSpeed = 0.08;
   let spawnTimer = 0;
   const SPAWN_INTERVAL = 1800;
   let gameStartTime = 0;
   let lastSpeedIncreaseTime = 0;
-  const SPEED_INCREASE_INTERVAL = 30000; // 30 секунд
-  const SPEED_INCREASE_AMOUNT = 0.02; // Увеличение скорости
+  const SPEED_INCREASE_INTERVAL = 30000;
+  const SPEED_INCREASE_AMOUNT = 0.02;
   
   // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
-    fastSpeedMultiplier: 25, // Увеличено до 25
+    fastSpeedMultiplier: 25,
     normalSpeedMultiplier: 1,
     hasFullyVisibleBrick: false
   };
@@ -71,7 +71,7 @@
       color: '#ff6b6b',
       icon: '⚽',
       indicatorColor: '#ff4444',
-      isInstant: true // Разовый бонус
+      isInstant: true
     },
     FREEZE: { 
       id: 'freeze', 
@@ -84,20 +84,20 @@
     },
     PIERCE: { 
       id: 'pierce', 
-      name: 'Пробивной', 
+      name: 'Пробивной шар', 
       duration: 12000,
       color: '#9b59b6',
-      icon: '💥',
+      icon: '🔥',
       indicatorColor: '#9b59b6',
       isInstant: false
     },
     TRIPLE: { 
       id: 'triple', 
-      name: 'Тройной', 
+      name: 'Тройной шар', 
       color: '#f39c12',
-      icon: '🔶',
+      icon: '3️⃣',
       indicatorColor: '#f39c12',
-      isInstant: true // Разовый бонус
+      isInstant: true
     },
     BOTTOMWALL: { 
       id: 'bottomwall', 
@@ -121,7 +121,7 @@
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
 
-  // Speed slider - обновлен диапазон
+  // Speed slider
   speedSlider.min = 0.02;
   speedSlider.max = 0.2;
   speedSlider.step = 0.01;
@@ -227,7 +227,11 @@
     if (bottomWallEffect.active) {
       bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
     } else {
-      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.02);
+      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.05); // Быстрее исчезает
+      // Очищаем частицы, если эффект не активен и свечение исчезло
+      if (bottomWallEffect.glowAlpha <= 0) {
+        bottomWallEffect.particles = [];
+      }
     }
   }
 
@@ -380,7 +384,7 @@
     messageTimer = performance.now();
   }
 
-  // Рисуем индикаторы бонусов вверху экрана
+  // Рисуем индикаторы бонусов вверху экрана - ВОЗВРАЩАЕМ все индикаторы
   function drawPowerupIndicators(now) {
     const powerupEntries = Array.from(activeEffects.entries());
     if (powerupEntries.length === 0) return;
@@ -394,12 +398,22 @@
     ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * powerupEntries.length + 5);
     
     for (const [powerupId, effect] of powerupEntries) {
-      const powerupType = Object.values(POWERUP_TYPES).find(p => p.id === powerupId);
+      const powerupType = POWERUP_TYPES[powerupId];
       if (!powerupType) continue;
       
-      const elapsed = now - effect.startTime;
-      const remaining = Math.max(0, effect.duration - elapsed);
-      const progress = remaining / effect.duration;
+      let remaining = 0;
+      let progress = 1;
+      
+      // Для бонусов с длительностью вычисляем оставшееся время
+      if (powerupType.duration) {
+        const elapsed = now - effect.startTime;
+        remaining = Math.max(0, powerupType.duration - elapsed);
+        progress = remaining / powerupType.duration;
+      } else {
+        // Для разовых бонусов показываем полную шкалу
+        remaining = 9999;
+        progress = 1;
+      }
       
       ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
       ctx.fillRect(10, currentY, canvas.width - 20, indicatorHeight);
@@ -414,9 +428,14 @@
       ctx.textBaseline = 'middle';
       ctx.fillText(powerupType.icon, 12, currentY + indicatorHeight / 2);
       
-      const timeLeft = (remaining / 1000).toFixed(1);
+      let timeText = powerupType.name;
+      if (powerupType.duration) {
+        const timeLeft = (remaining / 1000).toFixed(1);
+        timeText = `${powerupType.name} (${timeLeft}с)`;
+      }
+      
       ctx.textAlign = 'right';
-      ctx.fillText(`${powerupType.name} (${timeLeft}с)`, canvas.width - 12, currentY + indicatorHeight / 2);
+      ctx.fillText(timeText, canvas.width - 12, currentY + indicatorHeight / 2);
       
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
@@ -519,7 +538,7 @@
     });
   }
 
-  // Обновление бонусов - заморозка не действует на падающие бонусы
+  // Обновление бонусов
   function updatePowerups(){
     const freezeActive = activeEffects.has('freeze');
     
@@ -547,11 +566,11 @@
     }
   }
 
-  // Активация бонуса - обновленная логика
+  // Активация бонуса
   function activatePowerup(type){
     const now = performance.now();
     
-    // Если эффект уже активен и это не разовый бонус, продлеваем время
+    // Для всех бонусов, кроме разовых, при повторной активации продлеваем время
     if(activeEffects.has(type.id) && !type.isInstant) {
       const effect = activeEffects.get(type.id);
       effect.startTime = now;
@@ -559,37 +578,39 @@
       return;
     }
     
-    // Для разовых бонусов (мультишар, тройной) всегда применяем эффект
+    // Для всех бонусов (включая разовые) добавляем в активные эффекты
+    // Для разовых бонусов устанавливаем очень большое время (или не устанавливаем)
     if(type.isInstant) {
-      switch(type.id){
-        case 'multiball':
-          const newBall = createBall();
-          newBall.x = paddle.x + paddle.width / 2;
-          newBall.y = paddle.y - newBall.radius;
-          newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
-          newBall.dy = -4;
-          showMessage(`Добавлен шар: ${type.name}`, type.color);
-          break;
-          
-        case 'triple':
-          for(let i=0; i<2; i++){
-            const tripleBall = createBall();
-            tripleBall.x = paddle.x + paddle.width / 2;
-            tripleBall.y = paddle.y - tripleBall.radius;
-            const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
-            tripleBall.dx = 4 * Math.cos(angle);
-            tripleBall.dy = -Math.abs(4 * Math.sin(angle));
-          }
-          showMessage(`Добавлены шары: ${type.name}`, type.color);
-          break;
-      }
-      return;
+      // Для разовых бонусов добавляем с фиктивной длительностью (для отображения)
+      activeEffects.set(type.id, { startTime: now, duration: 5000 }); // 5 секунд для отображения
+    } else {
+      // Для бонусов с длительностью
+      activeEffects.set(type.id, { startTime: now, duration: type.duration });
     }
     
-    // Для бонусов с длительностью
-    activeEffects.set(type.id, { startTime: now, duration: type.duration });
-    
+    // Применяем немедленный эффект
     switch(type.id){
+      case 'multiball':
+        const newBall = createBall();
+        newBall.x = paddle.x + paddle.width / 2;
+        newBall.y = paddle.y - newBall.radius;
+        newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+        newBall.dy = -4;
+        showMessage(`Добавлен шар: ${type.name}`, type.color);
+        break;
+        
+      case 'triple':
+        for(let i=0; i<2; i++){
+          const tripleBall = createBall();
+          tripleBall.x = paddle.x + paddle.width / 2;
+          tripleBall.y = paddle.y - tripleBall.radius;
+          const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
+          tripleBall.dx = 4 * Math.cos(angle);
+          tripleBall.dy = -Math.abs(4 * Math.sin(angle));
+        }
+        showMessage(`Добавлены шары: ${type.name}`, type.color);
+        break;
+        
       case 'freeze':
         showMessage(`Активирован: ${type.name}`, type.color);
         break;
@@ -613,7 +634,13 @@
     
     // Удаляем истекшие эффекты
     for(const [id, effect] of activeEffects){
-      if(now - effect.startTime > effect.duration){
+      const powerupType = POWERUP_TYPES[id];
+      if (!powerupType) continue;
+      
+      // Для разовых бонусов удаляем через 5 секунд
+      const duration = powerupType.isInstant ? 5000 : effect.duration;
+      
+      if(now - effect.startTime > duration){
         activeEffects.delete(id);
         
         // Отменяем эффекты
@@ -622,19 +649,20 @@
             balls.forEach(ball => ball.pierce = false);
             break;
           case 'bottomwall':
+            // При отмене нижней стенки сбрасываем эффекты
             bottomWallEffect.active = false;
+            bottomWallEffect.particles = [];
             break;
         }
       }
     }
   }
 
-  // Обновление кирпичей - обновленная логика для заморозки
+  // Обновление кирпичей
   function updateBricks(now){
     const freezeActive = activeEffects.has('freeze');
     
     // Проверяем, есть ли на поле полностью видимый кирпич
-    // Кирпич считается полностью видимым, когда его ВЕРХНЯЯ часть (y - HEX_RADIUS) > 0
     let hasFullyVisibleBrick = false;
     for(const brick of hexBricks){
       if(!brick.hit && (brick.y - HEX_RADIUS) > 0){
@@ -672,14 +700,13 @@
       }
     }
     
-    // Удаляем уничтоженные кирпичи (работает даже при заморозке)
+    // Удаляем уничтоженные кирпичи
     for(let i = hexBricks.length - 1; i >= 0; i--){
       const brick = hexBricks[i];
       if(brick.hit && brick.removing){
         const tt = now - brick.removeStart;
         if(tt > 360){
           // При уничтожении кирпича с бонусом создаем падающий бонус
-          // Бонусы выпадают даже при заморозке
           if(brick.containsPowerup){
             spawnPowerup(brick.x, brick.y, brick.powerupType);
           }
@@ -777,50 +804,8 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Индикаторы бонусов вверху экрана (только для бонусов с длительностью)
-    const durationPowerups = Array.from(activeEffects.entries())
-      .filter(([id]) => !POWERUP_TYPES[id]?.isInstant);
-    if (durationPowerups.length > 0) {
-      const indicatorHeight = 8;
-      const spacing = 2;
-      const startY = 5;
-      let currentY = startY;
-      
-      ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-      ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * durationPowerups.length + 5);
-      
-      for (const [powerupId, effect] of durationPowerups) {
-        const powerupType = POWERUP_TYPES[powerupId];
-        if (!powerupType) continue;
-        
-        const elapsed = now - effect.startTime;
-        const remaining = Math.max(0, effect.duration - elapsed);
-        const progress = remaining / effect.duration;
-        
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-        ctx.fillRect(10, currentY, canvas.width - 20, indicatorHeight);
-        
-        const barWidth = (canvas.width - 20) * progress;
-        ctx.fillStyle = powerupType.indicatorColor;
-        ctx.fillRect(10, currentY, barWidth, indicatorHeight);
-        
-        ctx.fillStyle = '#fff';
-        ctx.font = '12px Arial';
-        ctx.textAlign = 'left';
-        ctx.textBaseline = 'middle';
-        ctx.fillText(powerupType.icon, 12, currentY + indicatorHeight / 2);
-        
-        const timeLeft = (remaining / 1000).toFixed(1);
-        ctx.textAlign = 'right';
-        ctx.fillText(`${powerupType.name} (${timeLeft}с)`, canvas.width - 12, currentY + indicatorHeight / 2);
-        
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
-        ctx.lineWidth = 1;
-        ctx.strokeRect(10, currentY, canvas.width - 20, indicatorHeight);
-        
-        currentY += indicatorHeight + spacing;
-      }
-    }
+    // Индикаторы бонусов вверху экрана
+    drawPowerupIndicators(now);
 
     // bricks
     for (const b of hexBricks){
