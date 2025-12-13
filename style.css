@@ -10,4 +10,22 @@ button{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:8px 12px;b
 .mode-select{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap}
 .speed-control{display:flex;gap:8px;align-items:center;margin-bottom:8px}
 .completion{color:#4cc98a;font-weight:bold}
+#powerupIndicators {
+  display: none;
+  flex-direction: column;
+  gap: 5px;
+  margin: 10px 0;
+  padding: 10px;
+  background: rgba(0,0,0,0.8);
+  border-radius: 5px;
+  color: white;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+  max-height: 150px;
+  overflow-y: auto;
+}
+
+.powerup-indicator {
+  transition: background 0.3s ease;
+}
 @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
