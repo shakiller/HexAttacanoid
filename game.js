@@ -844,56 +844,56 @@
     }
   }
 
-  // Обновление активных бонусов - ИСПРАВЛЕННАЯ ВЕРСИЯ
+  // Обновление активных бонусов - КОМПЛЕТНО ПЕРЕПИСАНА ДЛЯ ГАРАНТИРОВАННОГО ПРЕКРАЩЕНИЯ
   function updateActivePowerups(now){
-    // Создаем массив для бонусов, которые нужно удалить
-    const effectsToRemove = [];
+    let needUpdate = false;
     
-    // Проверяем каждый активный эффект
-    for(const [id, effect] of activeEffects.entries()){
+    // Создаем копию массива ключей, чтобы можно было безопасно удалять во время итерации
+    const effectIds = Array.from(activeEffects.keys());
+    
+    for(const id of effectIds){
+      const effect = activeEffects.get(id);
+      if(!effect) continue;
+      
       const powerupType = POWERUP_TYPES[id];
-      if(!powerupType || !powerupType.duration) continue;
-      
-      const elapsed = now - effect.startTime;
-      
-      // Если время эффекта истекло
-      if(elapsed >= powerupType.duration){
-        effectsToRemove.push({id: id, powerupType: powerupType});
+      if(powerupType && powerupType.duration){
+        const elapsed = now - effect.startTime;
+        
+        // Проверяем, истекло ли время
+        if(elapsed >= powerupType.duration){
+          console.log(`Удаляем бонус ${id}: прошло ${elapsed}мс, длительность ${powerupType.duration}мс`);
+          
+          // Удаляем эффект
+          activeEffects.delete(id);
+          needUpdate = true;
+          
+          // Отменяем эффекты конкретного бонуса
+          switch(id){
+            case 'pierce':
+              // Снимаем эффект пробивания со всех шаров
+              balls.forEach(ball => {
+                ball.pierce = false;
+              });
+              showMessage(`${powerupType.name} закончился`, powerupType.color);
+              break;
+              
+            case 'bottomwall':
+              bottomWallEffect.active = false;
+              bottomWallEffect.glowAlpha = 0;
+              showMessage(`${powerupType.name} закончился`, powerupType.color);
+              break;
+              
+            case 'freeze':
+              // Заморозка автоматически прекращается при удалении из activeEffects
+              showMessage(`${powerupType.name} закончилась`, powerupType.color);
+              break;
+          }
+        }
       }
     }
     
-    // Удаляем истекшие эффекты
-    for(const item of effectsToRemove){
-      const id = item.id;
-      const powerupType = item.powerupType;
-      
-      // Отменяем эффекты конкретного бонуса
-      switch(id){
-        case 'pierce':
-          // Снимаем эффект пробивания со всех шаров
-          balls.forEach(ball => {
-            ball.pierce = false;
-          });
-          showMessage(`${powerupType.name} закончился`, powerupType.color);
-          break;
-          
-        case 'bottomwall':
-          bottomWallEffect.active = false;
-          bottomWallEffect.glowAlpha = 0;
-          showMessage(`${powerupType.name} закончилась`, powerupType.color);
-          break;
-          
-        case 'freeze':
-          showMessage(`${powerupType.name} закончилась`, powerupType.color);
-          break;
-      }
-      
-      // Удаляем эффект из активных
-      activeEffects.delete(id);
-    }
-    
-    // Обновляем индикаторы, если что-то изменилось
-    if(effectsToRemove.length > 0){
+    // Если удалили истекший бонус, обновляем индикаторы
+    if (needUpdate) {
       updatePowerupIndicatorsDisplay();
     }
   }
@@ -999,20 +999,6 @@
     setTimeout(() => {
       alert(`Игра окончена!\nВаш счет: ${score}\nВремя выживания: ${minutes}:${seconds.toString().padStart(2, '0')}\nНажмите Restart чтобы играть снова.`);
     }, 100);
-  }
-
-  function drawGameOverScreen() {
-    ctx.fillStyle = 'rgba(0,0,0,0.85)';
-    ctx.fillRect(0,0,canvas.width,canvas.height);
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 42px system-ui, Arial';
-    ctx.textAlign = 'center';
-    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 40);
-    ctx.fillStyle = '#fff';
-    ctx.font = '24px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 + 20);
-    ctx.fillText(`Нажмите Restart`, canvas.width/2, canvas.height/2 + 60);
-    ctx.textAlign = 'left';
   }
 
   // Draw scene
@@ -1447,4 +1433,5 @@
   lastTime = performance.now();
   running = true;
   requestAnimationFrame(loop);
-})();
+})(); 
+/*нужно исправить баг. по окончанию времени бонуса, исчезает индикатор и должен прекратиться эффект бонуса. исчезнуть нижняя стенка, пропасть заморозка, шары из огненных становятся обычными.*/
