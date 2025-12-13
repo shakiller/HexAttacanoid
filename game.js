@@ -380,19 +380,18 @@
 
   // Инициализация индикаторов бонусов
   function initializePowerupIndicators() {
-    // Создаем индикаторы для каждого типа бонуса с длительностью
-    const durationPowerups = Object.values(POWERUP_TYPES).filter(p => p.duration);
-    
     powerupIndicatorsEl.innerHTML = '';
-    powerupIndicatorsEl.style.display = 'flex';
-    powerupIndicatorsEl.style.flexDirection = 'column';
-    powerupIndicatorsEl.style.gap = '8px';
-    powerupIndicatorsEl.style.margin = '10px 0';
-    powerupIndicatorsEl.style.padding = '12px';
-    powerupIndicatorsEl.style.background = 'rgba(0,0,0,0.7)';
-    powerupIndicatorsEl.style.borderRadius = '10px';
-    powerupIndicatorsEl.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
-    powerupIndicatorsEl.style.minHeight = '60px';
+    powerupIndicatorsEl.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin: 10px 0;
+      padding: 12px;
+      background: rgba(0,0,0,0.7);
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
+      min-height: 60px;
+    `;
     
     // Добавляем заголовок
     const title = document.createElement('div');
@@ -415,150 +414,104 @@
       display: flex;
       flex-direction: column;
       gap: 6px;
+      min-height: 40px;
     `;
     powerupIndicatorsEl.appendChild(indicatorsContainer);
     
-    // Если нет активных бонусов, показываем сообщение
-    const noActiveMessage = document.createElement('div');
-    noActiveMessage.id = 'noActiveMessage';
-    noActiveMessage.textContent = 'Нет активных бонусов';
-    noActiveMessage.style.cssText = `
-      color: rgba(255,255,255,0.6);
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      text-align: center;
-      padding: 10px;
-      font-style: italic;
-    `;
-    indicatorsContainer.appendChild(noActiveMessage);
-    
-    // Создаем индикаторы для каждого типа бонуса (изначально скрытые)
-    durationPowerups.forEach(powerupType => {
-      const indicator = document.createElement('div');
-      indicator.id = `indicator-${powerupType.id}`;
-      indicator.className = 'powerup-indicator';
-      indicator.style.cssText = `
-        display: none;
-        background: rgba(255,255,255,0.1);
-        color: white;
-        padding: 8px 12px;
-        border-radius: 6px;
-        border: 1px solid rgba(255,255,255,0.3);
-        font-family: Arial, sans-serif;
-        font-size: 14px;
-        text-align: left;
-        min-height: 40px;
-      `;
-      
-      // Внутренняя структура индикатора
-      indicator.innerHTML = `
-        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-          <div style="display: flex; align-items: center; gap: 10px;">
-            <span style="font-size: 18px;">${powerupType.icon}</span>
-            <span>${powerupType.name}</span>
-          </div>
-          <div id="time-${powerupType.id}" style="
-            background: rgba(0,0,0,0.5);
-            padding: 4px 8px;
-            border-radius: 15px;
-            font-size: 12px;
-            font-weight: bold;
-            min-width: 50px;
-            text-align: center;
-          ">0.0с</div>
-        </div>
-        <div style="margin-top: 6px;">
-          <div id="progress-${powerupType.id}" style="
-            width: 100%;
-            height: 4px;
-            background: rgba(255,255,255,0.2);
-            border-radius: 2px;
-            overflow: hidden;
-          ">
-            <div id="progress-bar-${powerupType.id}" style="
-              width: 0%;
-              height: 100%;
-              background: ${powerupType.indicatorColor};
-              transition: width 0.3s ease;
-            "></div>
-          </div>
-        </div>
-      `;
-      
-      indicatorsContainer.appendChild(indicator);
-    });
+    // Инициализируем показ индикаторов
+    updatePowerupIndicatorsDisplay();
   }
 
-  // Обновляем конкретный индикатор бонуса
-  function updatePowerupIndicator(powerupId) {
-    const indicator = document.getElementById(`indicator-${powerupId}`);
-    const timeElement = document.getElementById(`time-${powerupId}`);
-    const progressBar = document.getElementById(`progress-bar-${powerupId}`);
-    const powerupType = POWERUP_TYPES[powerupId];
-    const noActiveMessage = document.getElementById('noActiveMessage');
+  // Обновляем отображение индикаторов бонусов
+  function updatePowerupIndicatorsDisplay() {
+    const indicatorsContainer = document.getElementById('indicatorsContainer');
+    if (!indicatorsContainer) return;
     
-    if (!indicator || !powerupType) return;
-    
-    const effect = activeEffects.get(powerupId);
-    
-    if (effect) {
-      // Бонус активен - скрываем сообщение "Нет активных бонусов"
-      if (noActiveMessage) noActiveMessage.style.display = 'none';
-      
-      // Показываем индикатор
-      indicator.style.display = 'block';
-      
-      const now = performance.now();
-      const elapsed = now - effect.startTime;
-      const remaining = Math.max(0, powerupType.duration - elapsed);
-      const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
-      const timeText = `${(remaining / 1000).toFixed(1)}с`;
-      
-      // Обновляем время
-      if (timeElement) timeElement.textContent = timeText;
-      
-      // Обновляем прогресс-бар
-      if (progressBar) {
-        progressBar.style.width = `${progress}%`;
-        progressBar.style.background = powerupType.indicatorColor;
-      }
-      
-      // Обновляем фоновый цвет индикатора
-      indicator.style.background = `linear-gradient(90deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.1))`;
-      indicator.style.borderColor = powerupType.indicatorColor;
-    } else {
-      // Бонус не активен - скрываем индикатор
-      indicator.style.display = 'none';
-      
-      // Проверяем, есть ли другие активные бонусы
-      const hasActivePowerups = Array.from(activeEffects.keys()).some(id => 
-        POWERUP_TYPES[id] && POWERUP_TYPES[id].duration
-      );
-      
-      // Если нет активных бонусов, показываем сообщение
-      if (noActiveMessage && !hasActivePowerups) {
-        noActiveMessage.style.display = 'block';
-      }
-    }
-  }
-
-  // Обновляем все индикаторы бонусов
-  function updateAllPowerupIndicators() {
+    // Получаем только бонусы с длительностью
     const durationPowerups = Object.values(POWERUP_TYPES).filter(p => p.duration);
-    const noActiveMessage = document.getElementById('noActiveMessage');
-    const hasActivePowerups = Array.from(activeEffects.keys()).some(id => 
-      POWERUP_TYPES[id] && POWERUP_TYPES[id].duration
+    
+    // Проверяем, есть ли активные бонусы с длительностью
+    const activeDurationPowerups = durationPowerups.filter(powerupType => 
+      activeEffects.has(powerupType.id)
     );
     
-    // Проверяем, есть ли активные бонусы
-    if (noActiveMessage) {
-      noActiveMessage.style.display = hasActivePowerups ? 'none' : 'block';
-    }
+    // Очищаем контейнер
+    indicatorsContainer.innerHTML = '';
     
-    // Обновляем каждый индикатор
-    durationPowerups.forEach(powerupType => {
-      updatePowerupIndicator(powerupType.id);
-    });
+    if (activeDurationPowerups.length === 0) {
+      // Если нет активных бонусов, показываем сообщение
+      const noActiveMessage = document.createElement('div');
+      noActiveMessage.textContent = 'Нет активных бонусов';
+      noActiveMessage.style.cssText = `
+        color: rgba(255,255,255,0.6);
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        text-align: center;
+        padding: 10px;
+        font-style: italic;
+      `;
+      indicatorsContainer.appendChild(noActiveMessage);
+    } else {
+      // Отображаем активные бонусы
+      activeDurationPowerups.forEach(powerupType => {
+        const effect = activeEffects.get(powerupType.id);
+        if (!effect) return;
+        
+        const now = performance.now();
+        const elapsed = now - effect.startTime;
+        const remaining = Math.max(0, powerupType.duration - elapsed);
+        const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
+        
+        const indicator = document.createElement('div');
+        indicator.className = 'powerup-indicator';
+        indicator.style.cssText = `
+          background: linear-gradient(90deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.1));
+          color: white;
+          padding: 8px 12px;
+          border-radius: 6px;
+          border: 1px solid ${powerupType.indicatorColor};
+          font-family: Arial, sans-serif;
+          font-size: 14px;
+          text-align: left;
+        `;
+        
+        indicator.innerHTML = `
+          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              <span style="font-size: 18px;">${powerupType.icon}</span>
+              <span>${powerupType.name}</span>
+            </div>
+            <div style="
+              background: rgba(0,0,0,0.5);
+              padding: 4px 8px;
+              border-radius: 15px;
+              font-size: 12px;
+              font-weight: bold;
+              min-width: 50px;
+              text-align: center;
+            ">${(remaining / 1000).toFixed(1)}с</div>
+          </div>
+          <div style="margin-top: 6px;">
+            <div style="
+              width: 100%;
+              height: 4px;
+              background: rgba(255,255,255,0.2);
+              border-radius: 2px;
+              overflow: hidden;
+            ">
+              <div style="
+                width: ${progress}%;
+                height: 100%;
+                background: ${powerupType.indicatorColor};
+                transition: width 0.3s ease;
+              "></div>
+            </div>
+          </div>
+        `;
+        
+        indicatorsContainer.appendChild(indicator);
+      });
+    }
   }
 
   // Создание нового шара
@@ -738,7 +691,7 @@
       const effect = activeEffects.get(type.id);
       effect.startTime = now;
       showMessage(`Бонус продлен: ${type.name}`, type.color);
-      updatePowerupIndicator(type.id);
+      updatePowerupIndicatorsDisplay(); // Обновляем индикаторы
       return;
     }
     
@@ -798,8 +751,8 @@
           break;
       }
       
-      // Обновляем индикатор сразу после активации
-      updatePowerupIndicator(type.id);
+      // Обновляем индикаторы сразу после активации
+      updatePowerupIndicatorsDisplay();
     }
   }
 
@@ -838,7 +791,7 @@
     
     // Если удалили истекший бонус, обновляем индикаторы
     if (needUpdate) {
-      updateAllPowerupIndicators();
+      updatePowerupIndicatorsDisplay();
     }
   }
 
@@ -1355,7 +1308,7 @@
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
-        updateAllPowerupIndicators(); // Обновляем индикаторы каждый кадр
+        updatePowerupIndicatorsDisplay(); // Обновляем индикаторы каждый кадр
       }
     }
 
