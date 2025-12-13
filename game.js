@@ -382,7 +382,7 @@
   function initializePowerupIndicators() {
     powerupIndicatorsEl.innerHTML = '';
     
-    // Устанавливаем компактные стили
+    // Устанавливаем компактные стили с фиксированной высотой
     powerupIndicatorsEl.style.cssText = `
       display: flex;
       flex-direction: row;
@@ -391,12 +391,14 @@
       padding: 8px;
       background: rgba(0,0,0,0.7);
       border-radius: 6px;
-      min-height: auto;
-      max-height: 60px;
+      height: 55px; /* Фиксированная высота */
       align-items: center;
       justify-content: center;
       flex-wrap: wrap;
       overflow: hidden;
+      box-sizing: border-box;
+      min-height: 55px;
+      max-height: 55px;
     `;
     
     // Создаем контейнер для индикаторов
@@ -411,6 +413,8 @@
       flex-wrap: wrap;
       overflow: hidden;
       max-width: 100%;
+      height: 55px;
+      box-sizing: border-box;
     `;
     
     // Добавляем подсказку
@@ -425,6 +429,9 @@
       padding: 4px 8px;
       font-style: italic;
       white-space: nowrap;
+      height: 100%;
+      display: flex;
+      align-items: center;
     `;
     indicatorsContainer.appendChild(hint);
     
@@ -462,6 +469,11 @@
         text-align: center;
         padding: 8px 12px;
         font-style: italic;
+        white-space: nowrap;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
       `;
       indicatorsContainer.appendChild(noActiveMessage);
     } else {
@@ -485,20 +497,22 @@
           display: flex;
           flex-direction: column;
           align-items: center;
+          justify-content: center;
           background: rgba(0,0,0,0.5);
           color: white;
-          padding: 6px 10px;
-          border-radius: 6px;
+          padding: 5px 8px;
+          border-radius: 4px;
           border: 1px solid ${powerupType.indicatorColor};
           font-family: Arial, sans-serif;
-          font-size: 12px;
+          font-size: 11px;
           text-align: center;
-          min-width: 70px;
-          max-width: 90px;
-          height: 50px;
+          min-width: 65px;
+          max-width: 80px;
+          height: 45px;
           box-sizing: border-box;
           position: relative;
           overflow: hidden;
+          flex-shrink: 0;
         `;
         
         // Верхняя часть с иконкой и названием
@@ -506,23 +520,26 @@
         topRow.style.cssText = `
           display: flex;
           align-items: center;
-          gap: 6px;
-          margin-bottom: 4px;
+          gap: 4px;
+          margin-bottom: 3px;
           width: 100%;
+          justify-content: center;
         `;
         
         const iconSpan = document.createElement('span');
         iconSpan.textContent = powerupType.icon;
-        iconSpan.style.fontSize = '16px';
+        iconSpan.style.fontSize = '14px';
+        iconSpan.style.flexShrink = '0';
         
         const nameSpan = document.createElement('span');
         nameSpan.textContent = powerupType.name;
-        nameSpan.style.fontSize = '10px';
+        nameSpan.style.fontSize = '9px';
         nameSpan.style.fontWeight = 'bold';
         nameSpan.style.whiteSpace = 'nowrap';
         nameSpan.style.overflow = 'hidden';
         nameSpan.style.textOverflow = 'ellipsis';
-        nameSpan.style.maxWidth = '60px';
+        nameSpan.style.maxWidth = '50px';
+        nameSpan.style.flexShrink = '1';
         
         topRow.appendChild(iconSpan);
         topRow.appendChild(nameSpan);
@@ -541,19 +558,20 @@
         const timeDiv = document.createElement('div');
         timeDiv.textContent = `${timeSeconds}с`;
         timeDiv.style.cssText = `
-          font-size: 10px;
+          font-size: 9px;
           font-weight: bold;
           color: ${powerupType.indicatorColor};
-          margin-bottom: 2px;
+          margin-bottom: 1px;
+          letter-spacing: -0.5px;
         `;
         
         // Полоса прогресса
         const progressBar = document.createElement('div');
         progressBar.style.cssText = `
           width: 100%;
-          height: 4px;
+          height: 3px;
           background: rgba(255,255,255,0.1);
-          border-radius: 2px;
+          border-radius: 1.5px;
           overflow: hidden;
         `;
         
@@ -808,7 +826,9 @@
       switch(type.id){
         case 'pierce':
           // Устанавливаем флаг пробивания для всех шаров
-          balls.forEach(ball => ball.pierce = true);
+          balls.forEach(ball => {
+            ball.pierce = true;
+          });
           break;
           
         case 'bottomwall':
@@ -849,18 +869,23 @@
       switch(id){
         case 'pierce':
           // Снимаем эффект пробивания со всех шаров
-          balls.forEach(ball => ball.pierce = false);
+          balls.forEach(ball => {
+            ball.pierce = false;
+          });
+          console.log('Бонус "Огненный шар" отключен');
           showMessage(`${powerupType.name} закончился`, powerupType.color);
           break;
           
         case 'bottomwall':
           bottomWallEffect.active = false;
           bottomWallEffect.glowAlpha = 0;
+          console.log('Бонус "Нижняя стенка" отключен');
           showMessage(`${powerupType.name} закончился`, powerupType.color);
           break;
           
         case 'freeze':
           // Заморозка автоматически прекращается при удалении из activeEffects
+          console.log('Бонус "Заморозка" отключен');
           showMessage(`${powerupType.name} закончилась`, powerupType.color);
           break;
       }
@@ -1380,9 +1405,12 @@
         // Проверяем увеличение скорости
         checkSpeedIncrease(now);
         
+        // Сначала обновляем бонусы (удаляем истекшие)
+        updateActivePowerups(now);
+        
+        // Потом обновляем остальные системы
         updateBricks(now);
         updatePowerups();
-        updateActivePowerups(now);
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
