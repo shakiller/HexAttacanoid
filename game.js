@@ -36,6 +36,9 @@
   const SPEED_INCREASE_INTERVAL = 30000;
   const SPEED_INCREASE_AMOUNT = 0.02;
   
+  // Лимит шаров
+  const MAX_BALLS = 20;
+  
   // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
     fastSpeedMultiplier: 25,
@@ -55,10 +58,10 @@
     maxBricksPerRow: 5,
     minBricksPerRow: 2,
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
-    powerupChance: 0.35, // Высокий шанс для тестирования
-    basePowerupChance: 0.35,
+    powerupChance: 0.25,
+    basePowerupChance: 0.25,
     powerupChanceIncrease: 0.02,
-    maxPowerupChance: 0.6,
+    maxPowerupChance: 0.5,
     gameOverLine: 500,
     minSpacing: HEX_RADIUS * 2.8
   };
@@ -89,7 +92,7 @@
       icon: '⬇️',
       indicatorColor: '#1abc9c'
     },
-    // Разовые бонусы (не показываем в полосках)
+    // Разовые бонусы
     MULTIBALL: { 
       id: 'multiball', 
       name: 'Мультишар', 
@@ -322,9 +325,8 @@
       glowAlpha: 0
     };
     
-    // Очищаем индикаторы бонусов
-    powerupIndicatorsEl.innerHTML = '';
-    powerupIndicatorsEl.style.display = 'none';
+    // Инициализируем индикаторы бонусов
+    initializePowerupIndicators();
     
     createBall();
     
@@ -345,7 +347,7 @@
     gameInfoEl.innerHTML = `
       <div>Счет: <strong>${score}</strong></div>
       <div>Жизни: <strong>${lives}</strong></div>
-      <div>Шаров: <strong>${balls.length}</strong></div>
+      <div>Шаров: <strong>${balls.length}/${MAX_BALLS}</strong></div>
       <div>Скорость: <strong>${currentBrickSpeed.toFixed(2)}</strong></div>
       <div>Время: <strong>${minutes}:${seconds.toString().padStart(2, '0')}</strong></div>
     `;
@@ -376,102 +378,156 @@
     messageTimer = performance.now();
   }
 
-  // УПРОЩЕННАЯ функция для создания индикаторов бонусов
-  function createPowerupIndicator(powerupType, effect) {
-    const now = performance.now();
-    const elapsed = now - effect.startTime;
-    const remaining = Math.max(0, powerupType.duration - elapsed);
-    const timeText = `${(remaining / 1000).toFixed(1)}с`;
-    const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
+  // Инициализация индикаторов бонусов
+  function initializePowerupIndicators() {
+    // Создаем индикаторы для каждого типа бонуса с длительностью
+    const durationPowerups = Object.values(POWERUP_TYPES).filter(p => p.duration);
     
-    // Создаем простой div с текстом
-    const indicator = document.createElement('div');
-    indicator.className = 'powerup-indicator';
-    
-    // Устанавливаем простые стили
-    indicator.style.cssText = `
-      background: linear-gradient(to right, ${powerupType.indicatorColor} ${progress}%, rgba(255,255,255,0.2) ${progress}%);
-      color: white;
-      padding: 10px 15px;
-      margin: 5px 0;
-      border-radius: 8px;
-      border: 2px solid rgba(255,255,255,0.3);
-      font-family: Arial, sans-serif;
-      font-size: 16px;
-      font-weight: bold;
-      text-align: center;
-      box-shadow: 0 2px 5px rgba(0,0,0,0.3);
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      min-height: 40px;
-    `;
-    
-    indicator.innerHTML = `
-      <div style="display: flex; align-items: center; gap: 10px;">
-        <span style="font-size: 20px;">${powerupType.icon}</span>
-        <span>${powerupType.name}</span>
-      </div>
-      <div style="background: rgba(0,0,0,0.5); padding: 5px 10px; border-radius: 20px; font-size: 14px;">
-        ${timeText}
-      </div>
-    `;
-    
-    return indicator;
-  }
-
-  // Обновляем HTML индикаторы бонусов
-  function updatePowerupIndicators() {
-    const powerupEntries = Array.from(activeEffects.entries());
-    
-    // Фильтруем только бонусы с длительностью
-    const durationPowerups = powerupEntries.filter(([id, effect]) => 
-      POWERUP_TYPES[id] && POWERUP_TYPES[id].duration && !POWERUP_TYPES[id].isInstant
-    );
-    
-    // Если нет бонусов, скрываем контейнер
-    if (durationPowerups.length === 0) {
-      powerupIndicatorsEl.innerHTML = '';
-      powerupIndicatorsEl.style.display = 'none';
-      return;
-    }
-    
-    // Показываем контейнер
-    powerupIndicatorsEl.style.display = 'block';
+    powerupIndicatorsEl.innerHTML = '';
+    powerupIndicatorsEl.style.display = 'flex';
+    powerupIndicatorsEl.style.flexDirection = 'column';
+    powerupIndicatorsEl.style.gap = '8px';
     powerupIndicatorsEl.style.margin = '10px 0';
-    powerupIndicatorsEl.style.padding = '10px';
+    powerupIndicatorsEl.style.padding = '12px';
     powerupIndicatorsEl.style.background = 'rgba(0,0,0,0.7)';
     powerupIndicatorsEl.style.borderRadius = '10px';
     powerupIndicatorsEl.style.boxShadow = '0 4px 10px rgba(0,0,0,0.5)';
-    
-    // Очищаем предыдущие индикаторы
-    powerupIndicatorsEl.innerHTML = '';
+    powerupIndicatorsEl.style.minHeight = '60px';
     
     // Добавляем заголовок
     const title = document.createElement('div');
-    title.textContent = 'Активные бонусы:';
+    title.textContent = 'Бонусы:';
     title.style.cssText = `
-      color: white;
+      color: #fff;
       font-family: Arial, sans-serif;
       font-size: 14px;
-      margin-bottom: 10px;
+      font-weight: bold;
+      margin-bottom: 8px;
       text-align: center;
-      opacity: 0.8;
+      opacity: 0.9;
     `;
     powerupIndicatorsEl.appendChild(title);
     
-    // Создаем индикаторы для каждого активного бонуса
-    for (const [powerupId, effect] of durationPowerups) {
-      const powerupType = POWERUP_TYPES[powerupId];
-      if (!powerupType) continue;
+    // Создаем контейнер для индикаторов
+    const indicatorsContainer = document.createElement('div');
+    indicatorsContainer.id = 'indicatorsContainer';
+    indicatorsContainer.style.cssText = `
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    `;
+    powerupIndicatorsEl.appendChild(indicatorsContainer);
+    
+    // Создаем индикаторы для каждого типа бонуса
+    durationPowerups.forEach(powerupType => {
+      const indicator = document.createElement('div');
+      indicator.id = `indicator-${powerupType.id}`;
+      indicator.className = 'powerup-indicator';
+      indicator.style.cssText = `
+        display: none;
+        background: rgba(255,255,255,0.1);
+        color: white;
+        padding: 8px 12px;
+        border-radius: 6px;
+        border: 1px solid rgba(255,255,255,0.3);
+        font-family: Arial, sans-serif;
+        font-size: 14px;
+        text-align: left;
+        min-height: 40px;
+      `;
       
-      const indicator = createPowerupIndicator(powerupType, effect);
-      powerupIndicatorsEl.appendChild(indicator);
+      // Внутренняя структура индикатора
+      indicator.innerHTML = `
+        <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
+          <div style="display: flex; align-items: center; gap: 10px;">
+            <span style="font-size: 18px;">${powerupType.icon}</span>
+            <span>${powerupType.name}</span>
+          </div>
+          <div id="time-${powerupType.id}" style="
+            background: rgba(0,0,0,0.5);
+            padding: 4px 8px;
+            border-radius: 15px;
+            font-size: 12px;
+            font-weight: bold;
+            min-width: 50px;
+            text-align: center;
+          ">0.0с</div>
+        </div>
+        <div style="margin-top: 6px;">
+          <div id="progress-${powerupType.id}" style="
+            width: 100%;
+            height: 4px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 2px;
+            overflow: hidden;
+          ">
+            <div style="
+              width: 0%;
+              height: 100%;
+              background: ${powerupType.indicatorColor};
+              transition: width 0.3s ease;
+            "></div>
+          </div>
+        </div>
+      `;
+      
+      indicatorsContainer.appendChild(indicator);
+    });
+  }
+
+  // Обновляем конкретный индикатор бонуса
+  function updatePowerupIndicator(powerupId) {
+    const indicator = document.getElementById(`indicator-${powerupId}`);
+    const timeElement = document.getElementById(`time-${powerupId}`);
+    const progressBar = document.querySelector(`#progress-${powerupId} > div`);
+    const powerupType = POWERUP_TYPES[powerupId];
+    
+    if (!indicator || !powerupType) return;
+    
+    const effect = activeEffects.get(powerupId);
+    
+    if (effect) {
+      // Бонус активен
+      indicator.style.display = 'block';
+      const now = performance.now();
+      const elapsed = now - effect.startTime;
+      const remaining = Math.max(0, powerupType.duration - elapsed);
+      const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
+      const timeText = `${(remaining / 1000).toFixed(1)}с`;
+      
+      // Обновляем время
+      if (timeElement) timeElement.textContent = timeText;
+      
+      // Обновляем прогресс-бар
+      if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+        progressBar.style.background = powerupType.indicatorColor;
+      }
+      
+      // Обновляем фоновый цвет индикатора
+      indicator.style.background = `linear-gradient(90deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.1))`;
+      indicator.style.borderColor = powerupType.indicatorColor;
+    } else {
+      // Бонус не активен
+      indicator.style.display = 'none';
     }
+  }
+
+  // Обновляем все индикаторы бонусов
+  function updateAllPowerupIndicators() {
+    const durationPowerups = Object.values(POWERUP_TYPES).filter(p => p.duration);
+    durationPowerups.forEach(powerupType => {
+      updatePowerupIndicator(powerupType.id);
+    });
   }
 
   // Создание нового шара
   function createBall(){
+    if (balls.length >= MAX_BALLS) {
+      showMessage(`Максимум шаров (${MAX_BALLS})!`, '#ff4444');
+      return null;
+    }
+    
     const ball = {
       id: Date.now() + Math.random(),
       x: canvas.width / 2,
@@ -543,9 +599,21 @@
       // Если нашли подходящую позицию, добавляем кирпич
       if (bestX !== null && bestDistance >= minSpacing * 0.7) {
         let containsPowerup = null;
-        if(Math.random() < INFINITE_SETTINGS.powerupChance){
-          const powerupTypes = Object.values(POWERUP_TYPES);
-          containsPowerup = randChoice(powerupTypes);
+        
+        // Если достигнут лимит шаров, не даём бонусы на добавление шаров
+        if (balls.length >= MAX_BALLS) {
+          // Фильтруем бонусы на добавление шаров
+          const availablePowerups = Object.values(POWERUP_TYPES).filter(p => 
+            p.id !== 'multiball' && p.id !== 'triple'
+          );
+          if (availablePowerups.length > 0 && Math.random() < INFINITE_SETTINGS.powerupChance) {
+            containsPowerup = randChoice(availablePowerups);
+          }
+        } else {
+          if (Math.random() < INFINITE_SETTINGS.powerupChance) {
+            const powerupTypes = Object.values(POWERUP_TYPES);
+            containsPowerup = randChoice(powerupTypes);
+          }
         }
         
         newBricks.push({
@@ -573,6 +641,11 @@
 
   // Спавн падающего бонуса
   function spawnPowerup(x, y, type){
+    // Если достигнут лимит шаров и это бонус на добавление шаров - не создаём его
+    if (balls.length >= MAX_BALLS && (type.id === 'multiball' || type.id === 'triple')) {
+      return;
+    }
+    
     powerups.push({
       x: x,
       y: y,
@@ -614,12 +687,18 @@
   function activatePowerup(type){
     const now = performance.now();
     
+    // Проверяем лимит шаров для бонусов на добавление шаров
+    if (balls.length >= MAX_BALLS && (type.id === 'multiball' || type.id === 'triple')) {
+      showMessage(`Максимум шаров (${MAX_BALLS})!`, '#ff4444');
+      return;
+    }
+    
     // Для бонусов с длительностью при повторной активации продлеваем время
     if(activeEffects.has(type.id) && type.duration) {
       const effect = activeEffects.get(type.id);
       effect.startTime = now;
       showMessage(`Бонус продлен: ${type.name}`, type.color);
-      updatePowerupIndicators();
+      updatePowerupIndicator(type.id);
       return;
     }
     
@@ -627,24 +706,34 @@
     if(type.isInstant) {
       switch(type.id){
         case 'multiball':
-          const newBall = createBall();
-          newBall.x = paddle.x + paddle.width / 2;
-          newBall.y = paddle.y - newBall.radius;
-          newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
-          newBall.dy = -4;
-          showMessage(`Добавлен шар: ${type.name}`, type.color);
+          if (balls.length < MAX_BALLS) {
+            const newBall = createBall();
+            if (newBall) {
+              newBall.x = paddle.x + paddle.width / 2;
+              newBall.y = paddle.y - newBall.radius;
+              newBall.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
+              newBall.dy = -4;
+              showMessage(`Добавлен шар: ${type.name}`, type.color);
+            }
+          }
           break;
           
         case 'triple':
-          for(let i=0; i<2; i++){
-            const tripleBall = createBall();
-            tripleBall.x = paddle.x + paddle.width / 2;
-            tripleBall.y = paddle.y - tripleBall.radius;
-            const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
-            tripleBall.dx = 4 * Math.cos(angle);
-            tripleBall.dy = -Math.abs(4 * Math.sin(angle));
+          if (balls.length + 2 <= MAX_BALLS) {
+            for(let i=0; i<2; i++){
+              const tripleBall = createBall();
+              if (tripleBall) {
+                tripleBall.x = paddle.x + paddle.width / 2;
+                tripleBall.y = paddle.y - tripleBall.radius;
+                const angle = (Math.PI/4) + (Math.random()-0.5) * 0.8;
+                tripleBall.dx = 4 * Math.cos(angle);
+                tripleBall.dy = -Math.abs(4 * Math.sin(angle));
+              }
+            }
+            showMessage(`Добавлены шары: ${type.name}`, type.color);
+          } else {
+            showMessage(`Нельзя добавить шары (макс: ${MAX_BALLS})`, '#ff4444');
           }
-          showMessage(`Добавлены шары: ${type.name}`, type.color);
           break;
       }
       return;
@@ -669,8 +758,8 @@
           break;
       }
       
-      // Обновляем индикаторы сразу после активации
-      updatePowerupIndicators();
+      // Обновляем индикатор сразу после активации
+      updatePowerupIndicator(type.id);
     }
   }
 
@@ -709,7 +798,7 @@
     
     // Если удалили истекший бонус, обновляем индикаторы
     if (needUpdate) {
-      updatePowerupIndicators();
+      updateAllPowerupIndicators();
     }
   }
 
@@ -1003,18 +1092,27 @@
     }
   }
 
-  // Physics and collisions
+  // Physics and collisions - ИСПРАВЛЕНА для предотвращения разгона шаров
   function reflect(vx,vy,nx,ny){
     const dot = vx*nx + vy*ny;
     let rx = vx - 2*dot*nx;
     let ry = vy - 2*dot*ny;
+    
+    // Ограничиваем минимальную скорость по вертикали
     const minY = 1.2;
     if (Math.abs(ry) < minY){
       ry = ry < 0 ? -minY : minY;
-      const speed = Math.sqrt(rx*rx + ry*ry) || 1;
-      const cur = Math.sqrt(rx*rx + ry*ry) || 1;
-      rx = rx * (speed/cur);
     }
+    
+    // Ограничиваем максимальную скорость
+    const currentSpeed = Math.sqrt(rx*rx + ry*ry);
+    const maxSpeed = 6; // Максимальная скорость шара
+    if (currentSpeed > maxSpeed) {
+      const scale = maxSpeed / currentSpeed;
+      rx *= scale;
+      ry *= scale;
+    }
+    
     return { dx: rx, dy: ry };
   }
 
@@ -1029,9 +1127,18 @@
     ballTrails.set(ball.id, trail);
 
     // walls
-    if (ball.x < ball.radius){ ball.x = ball.radius; ball.dx *= -1; }
-    if (ball.x > canvas.width - ball.radius){ ball.x = canvas.width - ball.radius; ball.dx *= -1; }
-    if (ball.y < ball.radius){ ball.y = ball.radius; ball.dy *= -1; }
+    if (ball.x < ball.radius){ 
+      ball.x = ball.radius; 
+      ball.dx = Math.abs(ball.dx); // Гарантируем положительное направление
+    }
+    if (ball.x > canvas.width - ball.radius){ 
+      ball.x = canvas.width - ball.radius; 
+      ball.dx = -Math.abs(ball.dx); // Гарантируем отрицательное направление
+    }
+    if (ball.y < ball.radius){ 
+      ball.y = ball.radius; 
+      ball.dy = Math.abs(ball.dy); // Гарантируем положительное направление вниз
+    }
 
     // paddle collision
     if (ball.dy > 0 &&
@@ -1039,11 +1146,12 @@
         ball.y - ball.radius < paddle.y + paddle.height &&
         ball.x + ball.radius > paddle.x &&
         ball.x - ball.radius < paddle.x + paddle.width){
+      
       const offset = (ball.x - (paddle.x + paddle.width/2)) / (paddle.width/2);
       const baseAngle = offset * (Math.PI/3);
       const variation = (Math.random() - 0.5) * (Math.PI/36);
       const final = baseAngle + variation;
-      const speed = Math.max(2.2, Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy));
+      const speed = Math.max(2.2, Math.min(6, Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy))); // Ограничиваем скорость
       ball.dx = speed * Math.sin(final);
       ball.dy = -Math.abs(speed * Math.cos(final));
       ball.y = paddle.y - ball.radius - 0.1;
@@ -1084,7 +1192,8 @@
           let nx = (ball.x - px) / (dist || 1);
           let ny = (ball.y - py) / (dist || 1);
           const r = reflect(ball.dx, ball.dy, nx, ny);
-          ball.dx = r.dx; ball.dy = r.dy;
+          ball.dx = r.dx; 
+          ball.dy = r.dy;
           b.hit = true;
           b.removing = true;
           b.removeStart = now;
@@ -1103,6 +1212,15 @@
         // Отскок от нижней границы с эффектом
         ball.y = canvas.height - ball.radius;
         ball.dy = -Math.abs(ball.dy) * 1.1;
+        
+        // Ограничиваем скорость после отскока
+        const currentSpeed = Math.sqrt(ball.dx*ball.dx + ball.dy*ball.dy);
+        const maxSpeed = 8;
+        if (currentSpeed > maxSpeed) {
+          const scale = maxSpeed / currentSpeed;
+          ball.dx *= scale;
+          ball.dy *= scale;
+        }
         
         // Создаем частицы эффекта
         createBottomWallParticles(ball.x, canvas.height - 5, 12);
@@ -1197,7 +1315,7 @@
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
-        updatePowerupIndicators(); // Обновляем индикаторы каждый кадр
+        updateAllPowerupIndicators(); // Обновляем индикаторы каждый кадр
       }
     }
 
