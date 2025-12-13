@@ -201,7 +201,7 @@
   // Обновление частиц эффекта нижней стенки
   function updateBottomWallEffect(now) {
     if (!bottomWallEffect.active) {
-      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.05);
+      bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.02);
     } else {
       bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
     }
@@ -217,7 +217,8 @@
       }
     }
     
-    if (!bottomWallEffect.active && bottomWallEffect.glowAlpha <= 0) {
+    // Полностью очищаем частицы, если эффект не активен и свечение исчезло
+    if (!bottomWallEffect.active && bottomWallEffect.glowAlpha <= 0 && bottomWallEffect.particles.length === 0) {
       bottomWallEffect.particles = [];
     }
   }
@@ -599,12 +600,15 @@
     }
   }
 
-  // Создание нового шара
+  // Создание нового шара с учетом активного эффекта пробивания
   function createBall(){
     if (balls.length >= MAX_BALLS) {
       showMessage(`Максимум шаров (${MAX_BALLS})!`, '#ff4444');
       return null;
     }
+    
+    // Проверяем, активен ли бонус пробивания
+    const isPierceActive = activeEffects.has('pierce');
     
     const ball = {
       id: Date.now() + Math.random(),
@@ -613,7 +617,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: false, // НЕ будет автоматически пробивающим, даже если бонус активен
+      pierce: isPierceActive, // Правильно устанавливаем статус пробивания
       trail: []
     };
     balls.push(ball);
@@ -828,7 +832,7 @@
       
       switch(type.id){
         case 'pierce':
-          // Устанавливаем флаг пробивания для всех шаров
+          // Устанавливаем флаг пробивания для ВСЕХ текущих шаров
           balls.forEach(ball => {
             ball.pierce = true;
           });
@@ -837,6 +841,10 @@
         case 'bottomwall':
           bottomWallEffect.active = true;
           break;
+          
+        case 'freeze':
+          // Ничего дополнительного не делаем - эффект проверяется в updateBricks
+          break;
       }
       
       // Обновляем индикаторы сразу после активации
@@ -844,57 +852,57 @@
     }
   }
 
-  // Обновление активных бонусов - КОМПЛЕТНО ПЕРЕПИСАНА ДЛЯ ГАРАНТИРОВАННОГО ПРЕКРАЩЕНИЯ
+  // Обновление активных бонусов - ИСПРАВЛЕННАЯ ВЕРСИЯ
   function updateActivePowerups(now){
-    let needUpdate = false;
+    const effectsToRemove = [];
     
-    // Создаем копию массива ключей, чтобы можно было безопасно удалять во время итерации
-    const effectIds = Array.from(activeEffects.keys());
-    
-    for(const id of effectIds){
-      const effect = activeEffects.get(id);
-      if(!effect) continue;
-      
-      const powerupType = POWERUP_TYPES[id];
-      if(powerupType && powerupType.duration){
+    // Проверяем каждый активный эффект
+    for(const [id, effect] of activeEffects.entries()){
+        const powerupType = POWERUP_TYPES[id];
+        if(!powerupType || !powerupType.duration) continue;
+        
         const elapsed = now - effect.startTime;
         
-        // Проверяем, истекло ли время
+        // Если время эффекта истекло
         if(elapsed >= powerupType.duration){
-          console.log(`Удаляем бонус ${id}: прошло ${elapsed}мс, длительность ${powerupType.duration}мс`);
-          
-          // Удаляем эффект
-          activeEffects.delete(id);
-          needUpdate = true;
-          
-          // Отменяем эффекты конкретного бонуса
-          switch(id){
-            case 'pierce':
-              // Снимаем эффект пробивания со всех шаров
-              balls.forEach(ball => {
-                ball.pierce = false;
-              });
-              showMessage(`${powerupType.name} закончился`, powerupType.color);
-              break;
-              
-            case 'bottomwall':
-              bottomWallEffect.active = false;
-              bottomWallEffect.glowAlpha = 0;
-              showMessage(`${powerupType.name} закончился`, powerupType.color);
-              break;
-              
-            case 'freeze':
-              // Заморозка автоматически прекращается при удалении из activeEffects
-              showMessage(`${powerupType.name} закончилась`, powerupType.color);
-              break;
-          }
+            effectsToRemove.push(id);
         }
-      }
     }
     
-    // Если удалили истекший бонус, обновляем индикаторы
-    if (needUpdate) {
-      updatePowerupIndicatorsDisplay();
+    // Удаляем истекшие эффекты
+    for(const id of effectsToRemove){
+        const powerupType = POWERUP_TYPES[id];
+        console.log(`Удаляем бонус ${id}: ${powerupType.name}`);
+        
+        // Отменяем эффекты конкретного бонуса ПЕРЕД удалением
+        switch(id){
+            case 'pierce':
+                // Снимаем эффект пробивания со всех шаров
+                balls.forEach(ball => {
+                    ball.pierce = false;
+                });
+                showMessage(`${powerupType.name} закончился`, powerupType.color);
+                break;
+                
+            case 'bottomwall':
+                bottomWallEffect.active = false;
+                // Оставляем glowAlpha для плавного исчезновения
+                showMessage(`${powerupType.name} закончилась`, powerupType.color);
+                break;
+                
+            case 'freeze':
+                // Заморозка автоматически прекращается при удалении
+                showMessage(`${powerupType.name} закончилась`, powerupType.color);
+                break;
+        }
+        
+        // Удаляем эффект из активных
+        activeEffects.delete(id);
+    }
+    
+    // Обновляем индикаторы, если что-то изменилось
+    if(effectsToRemove.length > 0){
+        updatePowerupIndicatorsDisplay();
     }
   }
 
@@ -967,23 +975,32 @@
     if(lives <= 0){
       gameOver();
     } else {
+      // Сохраняем активные эффекты (кроме нижней стенки)
+      const bottomWallWasActive = bottomWallEffect.active;
+      
       if(balls.length > 0){
         balls = [balls[0]];
         ballTrails.clear();
         ballTrails.set(balls[0].id, []);
         resetBall(balls[0]);
       }
+      
+      // Восстанавливаем активность нижней стенки, если она была активна
+      if(bottomWallWasActive && activeEffects.has('bottomwall')){
+        bottomWallEffect.active = true;
+      }
+      
       showMessage(`Потеряна жизнь! Осталось: ${lives}`, '#ff4444');
     }
   }
 
-  // Сброс шара
+  // Сброс шара с учетом текущих эффектов
   function resetBall(ball){
     ball.x = canvas.width / 2;
     ball.y = canvas.height * 0.7;
     ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
     ball.dy = -4;
-    ball.pierce = false; // Всегда сбрасываем пробивание
+    ball.pierce = activeEffects.has('pierce'); // Учитываем активный эффект пробивания
     ballTrails.set(ball.id, []);
   }
 
@@ -1056,7 +1073,7 @@
     ctx.fillRect(paddle.x + 4*zoneW, paddle.y, zoneW, paddle.height);
     ctx.globalAlpha = 1;
 
-    // Эффект нижней стенки
+    // Эффект нижней стенки (рисуем даже если эффект не активен, для плавного исчезновения)
     drawBottomWallEffect();
 
     // Линия проигрыша
@@ -1091,7 +1108,7 @@
         const a = (i+1)/trail.length;
         ctx.beginPath();
         ctx.arc(p.x, p.y, ball.radius * 0.6, 0, Math.PI*2);
-        ctx.fillStyle = `rgba(255,80,80,${a*0.45})`;
+        ctx.fillStyle = ball.pierce ? `rgba(255, 153, 0, ${a*0.45})` : `rgba(255,80,80,${a*0.45})`;
         ctx.fill();
       }
 
@@ -1101,7 +1118,7 @@
       ctx.fillStyle = ball.pierce ? '#ff9900' : '#ff4d4d';
       ctx.fill();
       
-      // Индикатор огненного шара
+      // Индикатор огненного шара (только если шар действительно огненный)
       if(ball.pierce){
         ctx.strokeStyle = '#fff';
         ctx.lineWidth = 2;
@@ -1160,6 +1177,20 @@
       ctx.fillText('Нажмите Pause для продолжения', canvas.width/2, canvas.height/2 + 40);
       ctx.textAlign = 'left';
     }
+  }
+
+  function drawGameOverScreen() {
+    ctx.fillStyle = 'rgba(0,0,0,0.85)';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle = '#ff4444';
+    ctx.font = 'bold 42px system-ui, Arial';
+    ctx.textAlign = 'center';
+    ctx.fillText('ИГРА ОКОНЧЕНА', canvas.width/2, canvas.height/2 - 40);
+    ctx.fillStyle = '#fff';
+    ctx.font = '24px system-ui, Arial';
+    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 + 20);
+    ctx.fillText(`Нажмите Restart`, canvas.width/2, canvas.height/2 + 60);
+    ctx.textAlign = 'left';
   }
 
   // Physics and collisions - ИСПРАВЛЕНА для предотвращения разгона шаров
@@ -1433,5 +1464,4 @@
   lastTime = performance.now();
   running = true;
   requestAnimationFrame(loop);
-})(); 
-/*нужно исправить баг. по окончанию времени бонуса, исчезает индикатор и должен прекратиться эффект бонуса. исчезнуть нижняя стенка, пропасть заморозка, шары из огненных становятся обычными.*/
+})();
