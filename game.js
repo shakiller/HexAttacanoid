@@ -12,6 +12,9 @@
   const gameInfoEl = document.getElementById('gameInfo');
   const powerupIndicatorsEl = document.getElementById('powerupIndicators');
 
+  // Скрываем дублирующий статус внизу
+  statusEl.style.display = 'none';
+
   // Game state
   const HEX_RADIUS = 24;
   let hexBricks = [];
@@ -391,7 +394,7 @@
       padding: 8px;
       background: rgba(0,0,0,0.7);
       border-radius: 6px;
-      height: 55px; /* Фиксированная высота */
+      height: 55px;
       align-items: center;
       justify-content: center;
       flex-wrap: wrap;
@@ -610,7 +613,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: activeEffects.has('pierce'), // Учитываем активный бонус пробивания
+      pierce: false,
       trail: []
     };
     balls.push(ball);
@@ -841,12 +844,9 @@
     }
   }
 
-  // Обновление активных бонусов - ИСПРАВЛЕНО ПРЕКРАЩЕНИЕ ДЕЙСТВИЯ
+  // Обновление активных бонусов - ИСПРАВЛЕН БАГ С БЕСКОНЕЧНЫМИ БОНУСАМИ
   function updateActivePowerups(now){
     let needUpdate = false;
-    
-    // Создаем список бонусов для удаления
-    const toRemove = [];
     
     // Проверяем каждый активный эффект
     for(const [id, effect] of activeEffects.entries()){
@@ -854,40 +854,35 @@
       if(powerupType && powerupType.duration){
         // Если время истекло
         if(now - effect.startTime >= powerupType.duration){
-          toRemove.push(id);
+          // Удаляем эффект
+          activeEffects.delete(id);
+          needUpdate = true;
+          
+          // Отменяем эффекты конкретного бонуса
+          switch(id){
+            case 'pierce':
+              // Снимаем эффект пробивания со всех шаров
+              balls.forEach(ball => {
+                ball.pierce = false;
+              });
+              console.log('Бонус "Огненный шар" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
+              showMessage(`${powerupType.name} закончился`, powerupType.color);
+              break;
+              
+            case 'bottomwall':
+              bottomWallEffect.active = false;
+              bottomWallEffect.glowAlpha = 0;
+              console.log('Бонус "Нижняя стенка" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
+              showMessage(`${powerupType.name} закончился`, powerupType.color);
+              break;
+              
+            case 'freeze':
+              // Заморозка автоматически прекращается при удалении из activeEffects
+              console.log('Бонус "Заморозка" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
+              showMessage(`${powerupType.name} закончилась`, powerupType.color);
+              break;
+          }
         }
-      }
-    }
-    
-    // Удаляем истекшие бонусы и отменяем их эффекты
-    for(const id of toRemove){
-      const powerupType = POWERUP_TYPES[id];
-      activeEffects.delete(id);
-      needUpdate = true;
-      
-      // Отменяем эффекты конкретного бонуса
-      switch(id){
-        case 'pierce':
-          // Снимаем эффект пробивания со всех шаров
-          balls.forEach(ball => {
-            ball.pierce = false;
-          });
-          console.log('Бонус "Огненный шар" отключен');
-          showMessage(`${powerupType.name} закончился`, powerupType.color);
-          break;
-          
-        case 'bottomwall':
-          bottomWallEffect.active = false;
-          bottomWallEffect.glowAlpha = 0;
-          console.log('Бонус "Нижняя стенка" отключен');
-          showMessage(`${powerupType.name} закончился`, powerupType.color);
-          break;
-          
-        case 'freeze':
-          // Заморозка автоматически прекращается при удалении из activeEffects
-          console.log('Бонус "Заморозка" отключен');
-          showMessage(`${powerupType.name} закончилась`, powerupType.color);
-          break;
       }
     }
     
@@ -982,7 +977,7 @@
     ball.y = canvas.height * 0.7;
     ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
     ball.dy = -4;
-    ball.pierce = activeEffects.has('pierce'); // Восстанавливаем флаг пробивания
+    ball.pierce = false;
     ballTrails.set(ball.id, []);
   }
 
