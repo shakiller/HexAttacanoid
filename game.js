@@ -385,18 +385,20 @@
     messageTimer = performance.now();
   }
 
-  // Рисуем индикаторы бонусов вверху экрана
+  // Рисуем полоски времени для бонусов вверху экрана
   function drawPowerupIndicators(now) {
     const powerupEntries = Array.from(activeEffects.entries());
     if (powerupEntries.length === 0) return;
     
-    const indicatorHeight = 8;
-    const spacing = 2;
-    const startY = 5;
+    const indicatorHeight = 25;
+    const spacing = 4;
+    const startY = 10;
+    const padding = 10;
     let currentY = startY;
     
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.6)';
-    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * powerupEntries.length + 5);
+    // Фон для всех индикаторов
+    ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * powerupEntries.length + 10);
     
     for (const [powerupId, effect] of powerupEntries) {
       const powerupType = POWERUP_TYPES[powerupId];
@@ -404,43 +406,55 @@
       
       let remaining = 0;
       let progress = 1;
+      let timeText = '';
       
       // Для бонусов с длительностью вычисляем оставшееся время
-      if (powerupType.duration) {
+      if (powerupType.duration && !powerupType.isInstant) {
         const elapsed = now - effect.startTime;
         remaining = Math.max(0, powerupType.duration - elapsed);
         progress = remaining / powerupType.duration;
-      } else {
-        // Для разовых бонусов показываем полную шкалу
-        remaining = 9999;
-        progress = 1;
+        timeText = `${(remaining / 1000).toFixed(1)}с`;
+      } else if (powerupType.isInstant) {
+        // Для разовых бонусов показываем 3 секунды
+        const elapsed = now - effect.startTime;
+        remaining = Math.max(0, 3000 - elapsed);
+        progress = remaining / 3000;
+        timeText = '';
       }
       
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.2)';
-      ctx.fillRect(10, currentY, canvas.width - 20, indicatorHeight);
+      // Фон полоски
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
+      ctx.fillRect(padding, currentY, canvas.width - padding * 2, indicatorHeight);
       
-      const barWidth = (canvas.width - 20) * progress;
-      ctx.fillStyle = powerupType.indicatorColor;
-      ctx.fillRect(10, currentY, barWidth, indicatorHeight);
+      // Заполненная часть (прогресс)
+      const barWidth = (canvas.width - padding * 2) * progress;
+      const gradient = ctx.createLinearGradient(padding, 0, padding + barWidth, 0);
+      gradient.addColorStop(0, powerupType.indicatorColor);
+      gradient.addColorStop(1, lighten(powerupType.indicatorColor, 0.3));
+      ctx.fillStyle = gradient;
+      ctx.fillRect(padding, currentY, barWidth, indicatorHeight);
       
+      // Иконка бонуса
       ctx.fillStyle = '#fff';
-      ctx.font = '12px Arial';
+      ctx.font = '16px Arial';
       ctx.textAlign = 'left';
       ctx.textBaseline = 'middle';
-      ctx.fillText(powerupType.icon, 12, currentY + indicatorHeight / 2);
+      ctx.fillText(powerupType.icon, padding + 8, currentY + indicatorHeight / 2);
       
-      let timeText = powerupType.name;
-      if (powerupType.duration) {
-        const timeLeft = (remaining / 1000).toFixed(1);
-        timeText = `${powerupType.name} (${timeLeft}с)`;
+      // Название бонуса
+      ctx.fillText(powerupType.name, padding + 40, currentY + indicatorHeight / 2);
+      
+      // Время (если есть)
+      if (timeText) {
+        ctx.textAlign = 'right';
+        ctx.fillText(timeText, canvas.width - padding - 8, currentY + indicatorHeight / 2);
+        ctx.textAlign = 'left';
       }
       
-      ctx.textAlign = 'right';
-      ctx.fillText(timeText, canvas.width - 12, currentY + indicatorHeight / 2);
-      
+      // Обводка
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
       ctx.lineWidth = 1;
-      ctx.strokeRect(10, currentY, canvas.width - 20, indicatorHeight);
+      ctx.strokeRect(padding, currentY, canvas.width - padding * 2, indicatorHeight);
       
       currentY += indicatorHeight + spacing;
     }
@@ -463,76 +477,91 @@
     return ball;
   }
 
-  // Спавн ряда кирпичей - УЛУЧШЕННЫЙ рандом
+  // УЛУЧШЕННАЯ ФУНКЦИЯ спавна ряда кирпичей - БЕЗ НАХЛЁСТА
   function spawnBrickRow(yOffset = 0){
     const bricksInRow = randInt(INFINITE_SETTINGS.minBricksPerRow, INFINITE_SETTINGS.maxBricksPerRow);
     const minSpacing = INFINITE_SETTINGS.minSpacing;
+    const edgeMargin = HEX_RADIUS * 2;
+    const maxAttempts = 100;
     const newBricks = [];
     const rowId = Date.now() + Math.random();
     
-    // Создаем массив возможных позиций по X
-    const availablePositions = [];
-    const maxAttempts = 50;
-    const edgeMargin = HEX_RADIUS * 2;
-    
-    // Генерируем случайные позиции с учетом отступов от краев
-    for (let i = 0; i < maxAttempts; i++) {
-      const x = edgeMargin + Math.random() * (canvas.width - 2 * edgeMargin);
+    // Пытаемся разместить кирпичи без нахлёста
+    for (let attempt = 0; attempt < bricksInRow * 2; attempt++) {
+      if (newBricks.length >= bricksInRow) break;
       
-      // Проверяем, не слишком ли близко к другим кирпичам в ЭТОМ же ряду
-      let tooClose = false;
-      for (const brick of newBricks) {
-        if (Math.abs(brick.x - x) < minSpacing) {
-          tooClose = true;
-          break;
-        }
-      }
+      let bestX = null;
+      let bestDistance = 0;
       
-      // Проверяем, не слишком ли близко к существующим кирпичам
-      if (!tooClose) {
-        for (const brick of hexBricks) {
-          if (Math.abs(brick.y - yOffset) < 150 && distance(x, yOffset, brick.x, brick.y) < minSpacing * 0.8) {
-            tooClose = true;
-            break;
+      // Пробуем несколько случайных позиций и выбираем лучшую
+      for (let i = 0; i < maxAttempts; i++) {
+        const x = edgeMargin + Math.random() * (canvas.width - 2 * edgeMargin);
+        
+        // Проверяем минимальное расстояние до других кирпичей в этом же ряду
+        let minDist = Infinity;
+        for (const brick of newBricks) {
+          const dist = Math.abs(brick.x - x);
+          if (dist < minDist) {
+            minDist = dist;
           }
         }
-      }
-      
-      if (!tooClose) {
-        availablePositions.push(x);
-        if (availablePositions.length >= bricksInRow) {
+        
+        // Проверяем расстояние до существующих кирпичей выше
+        for (const brick of hexBricks) {
+          const verticalDist = Math.abs(brick.y - yOffset);
+          if (verticalDist < minSpacing * 2) {
+            const dist = distance(x, yOffset, brick.x, brick.y);
+            if (dist < minDist) {
+              minDist = dist;
+            }
+          }
+        }
+        
+        // Если нашли позицию с лучшим расстоянием, сохраняем её
+        if (minDist > bestDistance) {
+          bestDistance = minDist;
+          bestX = x;
+        }
+        
+        // Если нашли идеальную позицию (достаточно далеко от всех), используем её
+        if (minDist >= minSpacing) {
+          bestX = x;
           break;
         }
       }
-    }
-    
-    // Если не нашли достаточно позиций, уменьшаем количество кирпичей
-    const actualBricks = Math.min(bricksInRow, availablePositions.length);
-    
-    for(let i = 0; i < actualBricks; i++){
-      const x = availablePositions[i];
-      const y = yOffset;
       
-      let containsPowerup = null;
-      if(Math.random() < INFINITE_SETTINGS.powerupChance){
-        const powerupTypes = Object.values(POWERUP_TYPES);
-        containsPowerup = randChoice(powerupTypes);
+      // Если нашли подходящую позицию, добавляем кирпич
+      if (bestX !== null && bestDistance >= minSpacing * 0.7) {
+        let containsPowerup = null;
+        if(Math.random() < INFINITE_SETTINGS.powerupChance){
+          const powerupTypes = Object.values(POWERUP_TYPES);
+          containsPowerup = randChoice(powerupTypes);
+        }
+        
+        newBricks.push({
+          x: bestX,
+          y: yOffset,
+          color: randChoice(INFINITE_SETTINGS.brickColors),
+          hit: false,
+          removing: false,
+          removeStart: 0,
+          containsPowerup: containsPowerup,
+          powerupType: containsPowerup,
+          rowId: rowId
+        });
       }
-      
-      newBricks.push({
-        x: x,
-        y: y,
-        color: randChoice(INFINITE_SETTINGS.brickColors),
-        hit: false,
-        removing: false,
-        removeStart: 0,
-        containsPowerup: containsPowerup,
-        powerupType: containsPowerup,
-        rowId: rowId
-      });
     }
     
-    if(newBricks.length > 0){
+    // Если удалось разместить хотя бы 2 кирпича, добавляем ряд
+    if(newBricks.length >= 2){
+      hexBricks.push(...newBricks);
+      
+      // Отладочный вывод (можно убрать)
+      if (newBricks.length < bricksInRow) {
+        console.log(`Удалось разместить ${newBricks.length} из ${bricksInRow} кирпичей`);
+      }
+    } else if (newBricks.length > 0) {
+      // Если только 1 кирпич, всё равно добавляем
       hexBricks.push(...newBricks);
     }
   }
@@ -590,10 +619,10 @@
     
     // Для разовых бонусов всегда применяем эффект
     if(type.isInstant) {
-      // Добавляем в активные эффекты для отображения индикатора
+      // Добавляем в активные эффекты для отображения индикатора (3 секунды)
       activeEffects.set(type.id, { 
         startTime: now, 
-        duration: 5000, // Показываем 5 секунд
+        duration: 3000,
         isInstant: true 
       });
       
@@ -651,9 +680,14 @@
     // Обновляем состояние нижней стенки
     bottomWallEffect.active = activeEffects.has('bottomwall');
     
-    // Удаляем истекшие эффекты
+    // Удаляем истекшие эффекты (включая разовые бонусы через 3 секунды)
     for(const [id, effect] of activeEffects){
-      if(now - effect.startTime > effect.duration){
+      if(effect.isInstant) {
+        // Разовые бонусы удаляем через 3 секунды
+        if(now - effect.startTime > 3000) {
+          activeEffects.delete(id);
+        }
+      } else if(now - effect.startTime > effect.duration) {
         activeEffects.delete(id);
         
         // Отменяем эффекты
@@ -812,7 +846,7 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Индикаторы бонусов вверху экрана
+    // Полоски времени бонусов вверху экрана
     drawPowerupIndicators(now);
 
     // bricks
