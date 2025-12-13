@@ -38,7 +38,7 @@
   
   // Настройки ускоренного появления
   const APPEARANCE_SETTINGS = {
-    fastSpeedMultiplier: 5,
+    fastSpeedMultiplier: 25,
     normalSpeedMultiplier: 1,
     hasFullyVisibleBrick: false
   };
