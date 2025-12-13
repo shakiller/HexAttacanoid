@@ -8,9 +8,8 @@
   const modeSelect = document.getElementById('modeSelect');
   const levelSelect = document.getElementById('levelSelect');
   const levelCompletion = document.getElementById('levelCompletion');
-  const speedSlider = document.getElementById('speedSlider');
-  const speedValue = document.getElementById('speedValue');
   const titleEl = document.getElementById('title');
+  const gameInfoEl = document.getElementById('gameInfo');
 
   // Game state
   const HEX_RADIUS = 24;
@@ -63,24 +62,15 @@
     minSpacing: HEX_RADIUS * 2.8
   };
 
-  // Типы бонусов
+  // Типы бонусов (только с длительностью для полосок)
   const POWERUP_TYPES = {
-    MULTIBALL: { 
-      id: 'multiball', 
-      name: 'Мультишар', 
-      color: '#ff6b6b',
-      icon: '⚽',
-      indicatorColor: '#ff4444',
-      isInstant: true
-    },
     FREEZE: { 
       id: 'freeze', 
       name: 'Заморозка', 
       duration: 8000,
       color: '#4d96ff',
       icon: '❄️',
-      indicatorColor: '#4d96ff',
-      isInstant: false
+      indicatorColor: '#4d96ff'
     },
     PIERCE: { 
       id: 'pierce', 
@@ -88,16 +78,7 @@
       duration: 12000,
       color: '#ff9900',
       icon: '🔥',
-      indicatorColor: '#ff9900',
-      isInstant: false
-    },
-    TRIPLE: { 
-      id: 'triple', 
-      name: 'Тройной шар', 
-      color: '#f39c12',
-      icon: '3️⃣',
-      indicatorColor: '#f39c12',
-      isInstant: true
+      indicatorColor: '#ff9900'
     },
     BOTTOMWALL: { 
       id: 'bottomwall', 
@@ -105,8 +86,22 @@
       duration: 15000,
       color: '#1abc9c',
       icon: '⬇️',
-      indicatorColor: '#1abc9c',
-      isInstant: false
+      indicatorColor: '#1abc9c'
+    },
+    // Разовые бонусы (не показываем в полосках)
+    MULTIBALL: { 
+      id: 'multiball', 
+      name: 'Мультишар', 
+      color: '#ff6b6b',
+      icon: '⚽',
+      isInstant: true
+    },
+    TRIPLE: { 
+      id: 'triple', 
+      name: 'Тройной шар', 
+      color: '#f39c12',
+      icon: '3️⃣',
+      isInstant: true
     }
   };
 
@@ -120,19 +115,6 @@
     { value: 'Levels/level6.json', label: 'Уровень 6' },
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
-
-  // Speed slider
-  speedSlider.min = 0.02;
-  speedSlider.max = 0.2;
-  speedSlider.step = 0.01;
-  speedSlider.value = baseBrickSpeed;
-  speedValue.textContent = baseBrickSpeed.toFixed(2);
-  
-  speedSlider.addEventListener('input', (e) => {
-    baseBrickSpeed = parseFloat(e.target.value);
-    currentBrickSpeed = baseBrickSpeed;
-    speedValue.textContent = baseBrickSpeed.toFixed(2);
-  });
 
   // Mode selection
   modeSelect.addEventListener('change', (e) => {
@@ -211,14 +193,12 @@
 
   // Обновление частиц эффекта нижней стенки
   function updateBottomWallEffect(now) {
-    // Если эффект не активен, быстрее убираем свечение
     if (!bottomWallEffect.active) {
       bottomWallEffect.glowAlpha = Math.max(0, bottomWallEffect.glowAlpha - 0.05);
     } else {
       bottomWallEffect.glowAlpha = Math.min(0.7, bottomWallEffect.glowAlpha + 0.02);
     }
     
-    // Обновляем частицы
     for (let i = bottomWallEffect.particles.length - 1; i >= 0; i--) {
       const particle = bottomWallEffect.particles[i];
       particle.x += particle.dx;
@@ -230,7 +210,6 @@
       }
     }
     
-    // Если эффект не активен и свечение исчезло, очищаем частицы
     if (!bottomWallEffect.active && bottomWallEffect.glowAlpha <= 0) {
       bottomWallEffect.particles = [];
     }
@@ -350,14 +329,21 @@
     updateStatus();
   }
 
-  // Обновление статуса
+  // Обновление статуса и игровой информации
   function updateStatus() {
     const now = performance.now();
     const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
     
-    statusEl.textContent = `Счет: ${score} | Жизни: ${lives} | Время: ${minutes}:${seconds.toString().padStart(2, '0')} | Скорость: ${currentBrickSpeed.toFixed(2)}`;
+    // Обновляем HTML элемент с игровой информацией
+    gameInfoEl.innerHTML = `
+      <div>Счет: <strong>${score}</strong></div>
+      <div>Жизни: <strong>${lives}</strong></div>
+      <div>Шаров: <strong>${balls.length}</strong></div>
+      <div>Скорость: <strong>${currentBrickSpeed.toFixed(2)}</strong></div>
+      <div>Время: <strong>${minutes}:${seconds.toString().padStart(2, '0')}</strong></div>
+    `;
   }
 
   // Проверка увеличения скорости
@@ -385,10 +371,16 @@
     messageTimer = performance.now();
   }
 
-  // Рисуем полоски времени для бонусов вверху экрана
+  // Рисуем полоски времени только для бонусов с длительностью
   function drawPowerupIndicators(now) {
     const powerupEntries = Array.from(activeEffects.entries());
-    if (powerupEntries.length === 0) return;
+    
+    // Фильтруем только бонусы с длительностью (не разовые)
+    const durationPowerups = powerupEntries.filter(([id, effect]) => 
+      POWERUP_TYPES[id] && POWERUP_TYPES[id].duration && !POWERUP_TYPES[id].isInstant
+    );
+    
+    if (durationPowerups.length === 0) return;
     
     const indicatorHeight = 25;
     const spacing = 4;
@@ -398,29 +390,16 @@
     
     // Фон для всех индикаторов
     ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
-    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * powerupEntries.length + 10);
+    ctx.fillRect(5, 5, canvas.width - 10, (indicatorHeight + spacing) * durationPowerups.length + 10);
     
-    for (const [powerupId, effect] of powerupEntries) {
+    for (const [powerupId, effect] of durationPowerups) {
       const powerupType = POWERUP_TYPES[powerupId];
       if (!powerupType) continue;
       
-      let remaining = 0;
-      let progress = 1;
-      let timeText = '';
-      
-      // Для бонусов с длительностью вычисляем оставшееся время
-      if (powerupType.duration && !powerupType.isInstant) {
-        const elapsed = now - effect.startTime;
-        remaining = Math.max(0, powerupType.duration - elapsed);
-        progress = remaining / powerupType.duration;
-        timeText = `${(remaining / 1000).toFixed(1)}с`;
-      } else if (powerupType.isInstant) {
-        // Для разовых бонусов показываем 3 секунды
-        const elapsed = now - effect.startTime;
-        remaining = Math.max(0, 3000 - elapsed);
-        progress = remaining / 3000;
-        timeText = '';
-      }
+      const elapsed = now - effect.startTime;
+      const remaining = Math.max(0, powerupType.duration - elapsed);
+      const progress = remaining / powerupType.duration;
+      const timeText = `${(remaining / 1000).toFixed(1)}с`;
       
       // Фон полоски
       ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
@@ -444,12 +423,10 @@
       // Название бонуса
       ctx.fillText(powerupType.name, padding + 40, currentY + indicatorHeight / 2);
       
-      // Время (если есть)
-      if (timeText) {
-        ctx.textAlign = 'right';
-        ctx.fillText(timeText, canvas.width - padding - 8, currentY + indicatorHeight / 2);
-        ctx.textAlign = 'left';
-      }
+      // Время
+      ctx.textAlign = 'right';
+      ctx.fillText(timeText, canvas.width - padding - 8, currentY + indicatorHeight / 2);
+      ctx.textAlign = 'left';
       
       // Обводка
       ctx.strokeStyle = 'rgba(255, 255, 255, 0.3)';
@@ -555,11 +532,6 @@
     // Если удалось разместить хотя бы 2 кирпича, добавляем ряд
     if(newBricks.length >= 2){
       hexBricks.push(...newBricks);
-      
-      // Отладочный вывод (можно убрать)
-      if (newBricks.length < bricksInRow) {
-        console.log(`Удалось разместить ${newBricks.length} из ${bricksInRow} кирпичей`);
-      }
     } else if (newBricks.length > 0) {
       // Если только 1 кирпич, всё равно добавляем
       hexBricks.push(...newBricks);
@@ -609,23 +581,16 @@
   function activatePowerup(type){
     const now = performance.now();
     
-    // Для всех бонусов, кроме разовых, при повторной активации продлеваем время
-    if(activeEffects.has(type.id) && !type.isInstant) {
+    // Для бонусов с длительностью при повторной активации продлеваем время
+    if(activeEffects.has(type.id) && type.duration) {
       const effect = activeEffects.get(type.id);
       effect.startTime = now;
       showMessage(`Бонус продлен: ${type.name}`, type.color);
       return;
     }
     
-    // Для разовых бонусов всегда применяем эффект
+    // Для разовых бонусов
     if(type.isInstant) {
-      // Добавляем в активные эффекты для отображения индикатора (3 секунды)
-      activeEffects.set(type.id, { 
-        startTime: now, 
-        duration: 3000,
-        isInstant: true 
-      });
-      
       switch(type.id){
         case 'multiball':
           const newBall = createBall();
@@ -652,26 +617,27 @@
     }
     
     // Для бонусов с длительностью
-    activeEffects.set(type.id, { 
-      startTime: now, 
-      duration: type.duration,
-      isInstant: false 
-    });
-    
-    switch(type.id){
-      case 'freeze':
-        showMessage(`Активирован: ${type.name}`, type.color);
-        break;
-        
-      case 'pierce':
-        balls.forEach(ball => ball.pierce = true);
-        showMessage(`Активирован: ${type.name}`, type.color);
-        break;
-        
-      case 'bottomwall':
-        bottomWallEffect.active = true;
-        showMessage(`Активирован: ${type.name}`, type.color);
-        break;
+    if(type.duration) {
+      activeEffects.set(type.id, { 
+        startTime: now,
+        type: type
+      });
+      
+      switch(type.id){
+        case 'freeze':
+          showMessage(`Активирован: ${type.name}`, type.color);
+          break;
+          
+        case 'pierce':
+          balls.forEach(ball => ball.pierce = true);
+          showMessage(`Активирован: ${type.name}`, type.color);
+          break;
+          
+        case 'bottomwall':
+          bottomWallEffect.active = true;
+          showMessage(`Активирован: ${type.name}`, type.color);
+          break;
+      }
     }
   }
 
@@ -680,25 +646,22 @@
     // Обновляем состояние нижней стенки
     bottomWallEffect.active = activeEffects.has('bottomwall');
     
-    // Удаляем истекшие эффекты (включая разовые бонусы через 3 секунды)
+    // Удаляем истекшие эффекты
     for(const [id, effect] of activeEffects){
-      if(effect.isInstant) {
-        // Разовые бонусы удаляем через 3 секунды
-        if(now - effect.startTime > 3000) {
+      const powerupType = POWERUP_TYPES[id];
+      if(powerupType && powerupType.duration){
+        if(now - effect.startTime > powerupType.duration){
           activeEffects.delete(id);
-        }
-      } else if(now - effect.startTime > effect.duration) {
-        activeEffects.delete(id);
-        
-        // Отменяем эффекты
-        switch(id){
-          case 'pierce':
-            balls.forEach(ball => ball.pierce = false);
-            break;
-          case 'bottomwall':
-            // При отмене нижней стенки сбрасываем эффекты
-            bottomWallEffect.active = false;
-            break;
+          
+          // Отменяем эффекты
+          switch(id){
+            case 'pierce':
+              balls.forEach(ball => ball.pierce = false);
+              break;
+            case 'bottomwall':
+              bottomWallEffect.active = false;
+              break;
+          }
         }
       }
     }
@@ -799,8 +762,6 @@
     const minutes = Math.floor(elapsedSeconds / 60);
     const seconds = elapsedSeconds % 60;
     
-    statusEl.textContent = `Игра окончена! Счет: ${score} | Время: ${minutes}:${seconds.toString().padStart(2, '0')}`;
-    
     drawGameOverScreen();
     
     setTimeout(() => {
@@ -846,7 +807,7 @@
     ctx.fillStyle = g;
     ctx.fillRect(0,0,canvas.width,canvas.height);
 
-    // Полоски времени бонусов вверху экрана
+    // Полоски времени бонусов вверху экрана (только с длительностью)
     drawPowerupIndicators(now);
 
     // bricks
@@ -935,7 +896,7 @@
       // ball
       ctx.beginPath();
       ctx.arc(ball.x, ball.y, ball.radius, 0, Math.PI*2);
-      ctx.fillStyle = ball.pierce ? '#ff9900' : '#ff4d4d'; // Огненный шар оранжевый
+      ctx.fillStyle = ball.pierce ? '#ff9900' : '#ff4d4d';
       ctx.fill();
       
       // Индикатор огненного шара
@@ -963,21 +924,6 @@
         ctx.restore();
       }
     }
-
-    // HUD
-    ctx.fillStyle = '#ddd';
-    ctx.font = '14px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, 10, 20);
-    ctx.fillText(`Жизни: ${lives}`, 10, 40);
-    ctx.fillText(`Шаров: ${balls.length}`, 10, 60);
-    ctx.fillText(`Скорость: ${currentBrickSpeed.toFixed(2)}`, canvas.width - 150, 20);
-    ctx.fillText(`Шанс бонуса: ${(INFINITE_SETTINGS.powerupChance * 100).toFixed(0)}%`, canvas.width - 150, 40);
-    
-    // Время игры
-    const elapsedSeconds = Math.floor((now - gameStartTime) / 1000);
-    const minutes = Math.floor(elapsedSeconds / 60);
-    const seconds = elapsedSeconds % 60;
-    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width - 150, 60);
     
     // Индикатор ускоренного появления
     if (!APPEARANCE_SETTINGS.hasFullyVisibleBrick) {
