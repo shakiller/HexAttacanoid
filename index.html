@@ -27,7 +27,23 @@
       <input type="range" id="speedSlider" min="0.02" max="0.1" step="0.01" value="0.04" style="width: 150px;">
       <span id="speedValue">0.04</span>
     </div>
-
+<div id="gameInfo" style="
+  display: flex;
+  justify-content: space-around;
+  background: rgba(0,0,0,0.8);
+  color: white;
+  padding: 10px;
+  border-radius: 5px;
+  margin: 10px 0;
+  font-family: Arial, sans-serif;
+  font-size: 14px;
+">
+  <div>Счет: <strong>0</strong></div>
+  <div>Жизни: <strong>3</strong></div>
+  <div>Шаров: <strong>1</strong></div>
+  <div>Скорость: <strong>0.08</strong></div>
+  <div>Время: <strong>0:00</strong></div>
+</div>
     <div class="frame">
       <canvas id="gameCanvas" width="900" height="540" aria-label="game canvas"></canvas>
     </div>
