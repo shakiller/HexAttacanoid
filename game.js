@@ -476,6 +476,9 @@
         const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
         const timeSeconds = Math.ceil(remaining / 1000);
         
+        // Если время вышло (0 секунд), пропускаем - он будет удален в updateActivePowerups
+        if (timeSeconds <= 0) return;
+        
         const indicator = document.createElement('div');
         indicator.className = 'powerup-indicator';
         indicator.style.cssText = `
@@ -829,7 +832,8 @@
     for(const [id, effect] of activeEffects.entries()){
       const powerupType = POWERUP_TYPES[id];
       if(powerupType && powerupType.duration){
-        if(now - effect.startTime > powerupType.duration){
+        // Если время истекло
+        if(now - effect.startTime >= powerupType.duration){
           toRemove.push(id);
         }
       }
