@@ -378,51 +378,63 @@
     messageTimer = performance.now();
   }
 
-  // Инициализация индикаторов бонусов
+  // Инициализация индикаторов бонусов - КОМПАКТНЫЙ ВАРИАНТ
   function initializePowerupIndicators() {
     powerupIndicatorsEl.innerHTML = '';
+    
+    // Устанавливаем компактные стили
     powerupIndicatorsEl.style.cssText = `
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 8px;
-      margin: 10px 0;
-      padding: 12px;
+      margin: 5px 0;
+      padding: 8px;
       background: rgba(0,0,0,0.7);
-      border-radius: 10px;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.5);
-      min-height: 60px;
+      border-radius: 6px;
+      min-height: auto;
+      max-height: 45px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: nowrap;
+      overflow: hidden;
     `;
-    
-    // Добавляем заголовок
-    const title = document.createElement('div');
-    title.textContent = 'Активные бонусы:';
-    title.style.cssText = `
-      color: #fff;
-      font-family: Arial, sans-serif;
-      font-size: 14px;
-      font-weight: bold;
-      margin-bottom: 8px;
-      text-align: center;
-      opacity: 0.9;
-    `;
-    powerupIndicatorsEl.appendChild(title);
     
     // Создаем контейнер для индикаторов
     const indicatorsContainer = document.createElement('div');
     indicatorsContainer.id = 'indicatorsContainer';
     indicatorsContainer.style.cssText = `
       display: flex;
-      flex-direction: column;
+      flex-direction: row;
       gap: 6px;
-      min-height: 40px;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: nowrap;
+      overflow: hidden;
+      max-width: 100%;
     `;
+    
+    // Добавляем подсказку
+    const hint = document.createElement('div');
+    hint.id = 'noActiveMessage';
+    hint.textContent = 'Нет активных бонусов';
+    hint.style.cssText = `
+      color: rgba(255,255,255,0.6);
+      font-family: Arial, sans-serif;
+      font-size: 12px;
+      text-align: center;
+      padding: 4px 8px;
+      font-style: italic;
+      white-space: nowrap;
+    `;
+    indicatorsContainer.appendChild(hint);
+    
     powerupIndicatorsEl.appendChild(indicatorsContainer);
     
     // Инициализируем показ индикаторов
     updatePowerupIndicatorsDisplay();
   }
 
-  // Обновляем отображение индикаторов бонусов
+  // Обновляем отображение индикаторов бонусов - КОМПАКТНЫЙ ВАРИАНТ
   function updatePowerupIndicatorsDisplay() {
     const indicatorsContainer = document.getElementById('indicatorsContainer');
     if (!indicatorsContainer) return;
@@ -441,19 +453,24 @@
     if (activeDurationPowerups.length === 0) {
       // Если нет активных бонусов, показываем сообщение
       const noActiveMessage = document.createElement('div');
+      noActiveMessage.id = 'noActiveMessage';
       noActiveMessage.textContent = 'Нет активных бонусов';
       noActiveMessage.style.cssText = `
         color: rgba(255,255,255,0.6);
         font-family: Arial, sans-serif;
-        font-size: 14px;
+        font-size: 12px;
         text-align: center;
-        padding: 10px;
+        padding: 4px 8px;
         font-style: italic;
+        white-space: nowrap;
       `;
       indicatorsContainer.appendChild(noActiveMessage);
     } else {
-      // Отображаем активные бонусы
-      activeDurationPowerups.forEach(powerupType => {
+      // Отображаем активные бонусы (максимум 3 в ряд)
+      const maxDisplay = 3;
+      const displayPowerups = activeDurationPowerups.slice(0, maxDisplay);
+      
+      displayPowerups.forEach(powerupType => {
         const effect = activeEffects.get(powerupType.id);
         if (!effect) return;
         
@@ -461,56 +478,111 @@
         const elapsed = now - effect.startTime;
         const remaining = Math.max(0, powerupType.duration - elapsed);
         const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
+        const timeSeconds = Math.ceil(remaining / 1000);
         
         const indicator = document.createElement('div');
         indicator.className = 'powerup-indicator';
         indicator.style.cssText = `
-          background: linear-gradient(90deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.1));
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          background: linear-gradient(135deg, ${powerupType.indicatorColor}20, rgba(255,255,255,0.05));
           color: white;
-          padding: 8px 12px;
-          border-radius: 6px;
+          padding: 4px 8px;
+          border-radius: 4px;
           border: 1px solid ${powerupType.indicatorColor};
           font-family: Arial, sans-serif;
-          font-size: 14px;
-          text-align: left;
+          font-size: 11px;
+          text-align: center;
+          min-width: 60px;
+          max-width: 80px;
+          height: 45px;
+          box-sizing: border-box;
+          position: relative;
+          overflow: hidden;
         `;
         
-        indicator.innerHTML = `
-          <div style="display: flex; justify-content: space-between; align-items: center; width: 100%;">
-            <div style="display: flex; align-items: center; gap: 10px;">
-              <span style="font-size: 18px;">${powerupType.icon}</span>
-              <span>${powerupType.name}</span>
-            </div>
-            <div style="
-              background: rgba(0,0,0,0.5);
-              padding: 4px 8px;
-              border-radius: 15px;
-              font-size: 12px;
-              font-weight: bold;
-              min-width: 50px;
-              text-align: center;
-            ">${(remaining / 1000).toFixed(1)}с</div>
-          </div>
-          <div style="margin-top: 6px;">
-            <div style="
-              width: 100%;
-              height: 4px;
-              background: rgba(255,255,255,0.2);
-              border-radius: 2px;
-              overflow: hidden;
-            ">
-              <div style="
-                width: ${progress}%;
-                height: 100%;
-                background: ${powerupType.indicatorColor};
-                transition: width 0.3s ease;
-              "></div>
-            </div>
-          </div>
+        // Иконка и название
+        const topRow = document.createElement('div');
+        topRow.style.cssText = `
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          margin-bottom: 2px;
         `;
+        
+        const iconSpan = document.createElement('span');
+        iconSpan.textContent = powerupType.icon;
+        iconSpan.style.fontSize = '14px';
+        
+        const nameSpan = document.createElement('span');
+        nameSpan.textContent = powerupType.name;
+        nameSpan.style.fontSize = '10px';
+        nameSpan.style.whiteSpace = 'nowrap';
+        nameSpan.style.overflow = 'hidden';
+        nameSpan.style.textOverflow = 'ellipsis';
+        nameSpan.style.maxWidth = '50px';
+        
+        topRow.appendChild(iconSpan);
+        topRow.appendChild(nameSpan);
+        
+        // Время
+        const timeDiv = document.createElement('div');
+        timeDiv.textContent = `${timeSeconds}с`;
+        timeDiv.style.cssText = `
+          font-size: 11px;
+          font-weight: bold;
+          margin: 2px 0;
+          background: rgba(0,0,0,0.3);
+          padding: 1px 6px;
+          border-radius: 10px;
+        `;
+        
+        // Прогресс-бар
+        const progressBar = document.createElement('div');
+        progressBar.style.cssText = `
+          width: 100%;
+          height: 3px;
+          background: rgba(255,255,255,0.1);
+          border-radius: 1px;
+          overflow: hidden;
+          margin-top: 2px;
+        `;
+        
+        const progressFill = document.createElement('div');
+        progressFill.id = `progress-${powerupType.id}`;
+        progressFill.style.cssText = `
+          width: ${progress}%;
+          height: 100%;
+          background: ${powerupType.indicatorColor};
+          transition: width 0.3s ease;
+        `;
+        
+        progressBar.appendChild(progressFill);
+        
+        indicator.appendChild(topRow);
+        indicator.appendChild(timeDiv);
+        indicator.appendChild(progressBar);
         
         indicatorsContainer.appendChild(indicator);
       });
+      
+      // Если бонусов больше 3, показываем счетчик
+      if (activeDurationPowerups.length > maxDisplay) {
+        const counter = document.createElement('div');
+        counter.textContent = `+${activeDurationPowerups.length - maxDisplay}`;
+        counter.style.cssText = `
+          background: rgba(255,255,255,0.2);
+          color: white;
+          padding: 4px 8px;
+          border-radius: 4px;
+          font-size: 11px;
+          font-weight: bold;
+          min-width: 30px;
+          text-align: center;
+        `;
+        indicatorsContainer.appendChild(counter);
+      }
     }
   }
 
@@ -743,6 +815,7 @@
       
       switch(type.id){
         case 'pierce':
+          // Устанавливаем флаг пробивания для всех шаров
           balls.forEach(ball => ball.pierce = true);
           break;
           
@@ -756,32 +829,44 @@
     }
   }
 
-  // Обновление активных бонусов
+  // Обновление активных бонусов - ИСПРАВЛЕНА ОШИБКА ОКОНЧАНИЯ ДЕЙСТВИЯ БОНУСОВ
   function updateActivePowerups(now){
     // Обновляем состояние нижней стенки
     bottomWallEffect.active = activeEffects.has('bottomwall');
     
     let needUpdate = false;
     
-    // Удаляем истекшие эффекты
-    for(const [id, effect] of activeEffects){
+    // Создаем копию ключей для безопасного удаления
+    const effectIds = Array.from(activeEffects.keys());
+    
+    // Проверяем каждый активный эффект
+    for(const id of effectIds){
+      const effect = activeEffects.get(id);
+      if(!effect) continue;
+      
       const powerupType = POWERUP_TYPES[id];
       if(powerupType && powerupType.duration){
         if(now - effect.startTime > powerupType.duration){
+          // Удаляем эффект
           activeEffects.delete(id);
           needUpdate = true;
           
-          // Отменяем эффекты
+          // Отменяем эффекты конкретного бонуса
           switch(id){
             case 'pierce':
+              // Снимаем эффект пробивания со всех шаров
               balls.forEach(ball => ball.pierce = false);
               showMessage(`${powerupType.name} закончился`, powerupType.color);
               break;
+              
             case 'bottomwall':
               bottomWallEffect.active = false;
+              bottomWallEffect.glowAlpha = 0;
               showMessage(`${powerupType.name} закончился`, powerupType.color);
               break;
+              
             case 'freeze':
+              // Заморозка автоматически прекращается при удалении из activeEffects
               showMessage(`${powerupType.name} закончилась`, powerupType.color);
               break;
           }
