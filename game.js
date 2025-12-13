@@ -55,10 +55,10 @@
     maxBricksPerRow: 5,
     minBricksPerRow: 2,
     brickColors: ['#c94c4c', '#4cc98a', '#4c7ac9', '#c9c24c', '#4cc9c6', '#c84cc9'],
-    powerupChance: 0.15,
-    basePowerupChance: 0.15,
+    powerupChance: 0.25, // Увеличил для тестирования
+    basePowerupChance: 0.25,
     powerupChanceIncrease: 0.02,
-    maxPowerupChance: 0.35,
+    maxPowerupChance: 0.45,
     gameOverLine: 500,
     minSpacing: HEX_RADIUS * 2.8
   };
@@ -117,7 +117,8 @@
     { value: 'Levels/custom.json', label: 'Пользовательский' }
   ];
 
-  // Mode selection
+  // Mode selection - устанавливаем бесконечный режим по умолчанию
+  modeSelect.value = 'infinite';
   modeSelect.addEventListener('change', (e) => {
     if (e.target.value === 'infinite') {
       levelSelect.style.display = 'none';
@@ -324,6 +325,7 @@
     
     // Очищаем индикаторы бонусов
     powerupIndicatorsEl.innerHTML = '';
+    powerupIndicatorsEl.style.display = 'none';
     
     createBall();
     
@@ -331,7 +333,6 @@
     spawnBrickRow(-HEX_RADIUS * 3);
     
     updateStatus();
-    updatePowerupIndicators(performance.now());
   }
 
   // Обновление статуса и игровой информации
@@ -377,7 +378,7 @@
   }
 
   // Обновляем HTML индикаторы бонусов
-  function updatePowerupIndicators(now) {
+  function updatePowerupIndicators() {
     const powerupEntries = Array.from(activeEffects.entries());
     
     // Фильтруем только бонусы с длительностью (не разовые)
@@ -388,11 +389,23 @@
     // Если нет бонусов, скрываем контейнер
     if (durationPowerups.length === 0) {
       powerupIndicatorsEl.style.display = 'none';
+      powerupIndicatorsEl.innerHTML = '';
       return;
     }
     
     // Показываем контейнер
     powerupIndicatorsEl.style.display = 'flex';
+    powerupIndicatorsEl.style.flexDirection = 'column';
+    powerupIndicatorsEl.style.gap = '5px';
+    powerupIndicatorsEl.style.margin = '10px 0';
+    powerupIndicatorsEl.style.padding = '10px';
+    powerupIndicatorsEl.style.background = 'rgba(0,0,0,0.8)';
+    powerupIndicatorsEl.style.borderRadius = '5px';
+    powerupIndicatorsEl.style.color = 'white';
+    powerupIndicatorsEl.style.fontFamily = 'Arial, sans-serif';
+    powerupIndicatorsEl.style.fontSize = '14px';
+    powerupIndicatorsEl.style.maxHeight = '150px';
+    powerupIndicatorsEl.style.overflowY = 'auto';
     
     // Очищаем предыдущие индикаторы
     powerupIndicatorsEl.innerHTML = '';
@@ -402,6 +415,7 @@
       const powerupType = POWERUP_TYPES[powerupId];
       if (!powerupType) continue;
       
+      const now = performance.now();
       const elapsed = now - effect.startTime;
       const remaining = Math.max(0, powerupType.duration - elapsed);
       const progress = Math.max(0, Math.min(100, (remaining / powerupType.duration) * 100));
@@ -423,6 +437,7 @@
         font-family: Arial, sans-serif;
         font-size: 14px;
         min-width: 200px;
+        transition: background 0.3s ease;
       `;
       
       // Содержимое индикатора
@@ -581,6 +596,7 @@
   // Активация бонуса
   function activatePowerup(type){
     const now = performance.now();
+    console.log(`Активируем бонус: ${type.name}`, type);
     
     // Для бонусов с длительностью при повторной активации продлеваем время
     if(activeEffects.has(type.id) && type.duration) {
@@ -624,6 +640,8 @@
         type: type
       });
       
+      console.log(`Бонус с длительностью добавлен: ${type.name}`, activeEffects);
+      
       switch(type.id){
         case 'freeze':
           showMessage(`Активирован: ${type.name}`, type.color);
@@ -639,6 +657,9 @@
           showMessage(`Активирован: ${type.name}`, type.color);
           break;
       }
+      
+      // Обновляем индикаторы сразу после активации
+      updatePowerupIndicators();
     }
   }
 
@@ -647,12 +668,15 @@
     // Обновляем состояние нижней стенки
     bottomWallEffect.active = activeEffects.has('bottomwall');
     
+    let needUpdate = false;
+    
     // Удаляем истекшие эффекты
     for(const [id, effect] of activeEffects){
       const powerupType = POWERUP_TYPES[id];
       if(powerupType && powerupType.duration){
         if(now - effect.startTime > powerupType.duration){
           activeEffects.delete(id);
+          needUpdate = true;
           
           // Отменяем эффекты
           switch(id){
@@ -665,6 +689,11 @@
           }
         }
       }
+    }
+    
+    // Если удалили истекший бонус, обновляем индикаторы
+    if (needUpdate) {
+      updatePowerupIndicators();
     }
   }
 
@@ -1152,7 +1181,8 @@
         updateBottomWallEffect(now);
         moveBalls(now);
         updateStatus();
-        updatePowerupIndicators(now);
+        // Обновляем индикаторы бонусов каждый кадр
+        updatePowerupIndicators();
       }
     }
 
