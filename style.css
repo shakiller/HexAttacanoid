@@ -26,6 +26,16 @@ button{background:#1f1f1f;border:1px solid #2b2b2b;color:#ddd;padding:8px 12px;b
 }
 
 .powerup-indicator {
-  transition: background 0.3s ease;
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+
+.powerup-indicator.show {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.powerup-indicator.hide {
+  opacity: 0;
+  transform: translateY(-10px);
 }
 @media (max-width:520px){ #title{font-size:14px} button{padding:8px 10px} .mode-select,.speed-control{flex-direction:column} }
