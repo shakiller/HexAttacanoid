@@ -613,7 +613,7 @@
       dx: 4 * (Math.random() < 0.5 ? 1 : -1),
       dy: -4,
       radius: 8,
-      pierce: false,
+      pierce: false, // НЕ будет автоматически пробивающим, даже если бонус активен
       trail: []
     };
     balls.push(ball);
@@ -844,16 +844,25 @@
     }
   }
 
-  // Обновление активных бонусов - ИСПРАВЛЕН БАГ С БЕСКОНЕЧНЫМИ БОНУСАМИ
+  // Обновление активных бонусов - КОМПЛЕТНО ПЕРЕПИСАНА ДЛЯ ГАРАНТИРОВАННОГО ПРЕКРАЩЕНИЯ
   function updateActivePowerups(now){
     let needUpdate = false;
     
-    // Проверяем каждый активный эффект
-    for(const [id, effect] of activeEffects.entries()){
+    // Создаем копию массива ключей, чтобы можно было безопасно удалять во время итерации
+    const effectIds = Array.from(activeEffects.keys());
+    
+    for(const id of effectIds){
+      const effect = activeEffects.get(id);
+      if(!effect) continue;
+      
       const powerupType = POWERUP_TYPES[id];
       if(powerupType && powerupType.duration){
-        // Если время истекло
-        if(now - effect.startTime >= powerupType.duration){
+        const elapsed = now - effect.startTime;
+        
+        // Проверяем, истекло ли время
+        if(elapsed >= powerupType.duration){
+          console.log(`Удаляем бонус ${id}: прошло ${elapsed}мс, длительность ${powerupType.duration}мс`);
+          
           // Удаляем эффект
           activeEffects.delete(id);
           needUpdate = true;
@@ -865,20 +874,17 @@
               balls.forEach(ball => {
                 ball.pierce = false;
               });
-              console.log('Бонус "Огненный шар" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
               showMessage(`${powerupType.name} закончился`, powerupType.color);
               break;
               
             case 'bottomwall':
               bottomWallEffect.active = false;
               bottomWallEffect.glowAlpha = 0;
-              console.log('Бонус "Нижняя стенка" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
               showMessage(`${powerupType.name} закончился`, powerupType.color);
               break;
               
             case 'freeze':
               // Заморозка автоматически прекращается при удалении из activeEffects
-              console.log('Бонус "Заморозка" отключен, время:', now - effect.startTime, 'длительность:', powerupType.duration);
               showMessage(`${powerupType.name} закончилась`, powerupType.color);
               break;
           }
@@ -977,7 +983,7 @@
     ball.y = canvas.height * 0.7;
     ball.dx = 4 * (Math.random() < 0.5 ? 1 : -1);
     ball.dy = -4;
-    ball.pierce = false;
+    ball.pierce = false; // Всегда сбрасываем пробивание
     ballTrails.set(ball.id, []);
   }
 
@@ -993,33 +999,6 @@
     setTimeout(() => {
       alert(`Игра окончена!\nВаш счет: ${score}\nВремя выживания: ${minutes}:${seconds.toString().padStart(2, '0')}\nНажмите Restart чтобы играть снова.`);
     }, 100);
-  }
-
-  // Рисуем экран окончания игры
-  function drawGameOverScreen(){
-    ctx.save();
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-    ctx.fillRect(0, 0, canvas.width, canvas.height);
-    
-    ctx.fillStyle = '#ff4444';
-    ctx.font = 'bold 36px system-ui, Arial';
-    ctx.textAlign = 'center';
-    ctx.textBaseline = 'middle';
-    ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 60);
-    
-    ctx.fillStyle = '#fff';
-    ctx.font = '20px system-ui, Arial';
-    ctx.fillText(`Счет: ${score}`, canvas.width/2, canvas.height/2 - 10);
-    
-    const elapsedSeconds = Math.floor((performance.now() - gameStartTime) / 1000);
-    const minutes = Math.floor(elapsedSeconds / 60);
-    const seconds = elapsedSeconds % 60;
-    ctx.fillText(`Время: ${minutes}:${seconds.toString().padStart(2, '0')}`, canvas.width/2, canvas.height/2 + 30);
-    
-    ctx.font = '16px system-ui, Arial';
-    ctx.fillText('Нажмите Restart для новой игры', canvas.width/2, canvas.height/2 + 80);
-    
-    ctx.restore();
   }
 
   // Draw scene
